@@ -1,8 +1,11 @@
+// ==========================================
+// المتغيرات الأساسية
+// ==========================================
 let currentUser = null;
 let currentStudent = null;
 let S = { xp: 0, streak: 0, last: "", done: [] };
 
-// المواد المتاحة لكل صف (يمكنك تعديلها لاحقاً)
+// المواد المتاحة لكل صف
 const SUBJECTS_BY_GRADE = {
   "الأول": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
   "الثاني": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
@@ -18,6 +21,9 @@ const SUBJECTS_BY_GRADE = {
   "البكالوريا": ["اللغة الإنجليزية", "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء"]
 };
 
+// ==========================================
+// دوال مساعدة
+// ==========================================
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -25,12 +31,21 @@ function showScreen(id) {
 
 function toast(m) {
   var t = document.getElementById("toast");
-  t.textContent = m; t.className = "show";
-  setTimeout(function() { t.className = ""; }, 1800);
+  t.textContent = m; 
+  t.className = "show";
+  setTimeout(function() { t.className = ""; }, 3000);
 }
 
+// دالة لإضافة مهلة زمنية للطلبات (لمنع التعليق)
+const withTimeout = (promise, ms) => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('انتهت مهلة الاتصال. يرجى التحقق من الإنترنت أو إعدادات سوبابيز.')), ms))
+  ]);
+};
+
 // ==========================================
-// 1. نظام المصادقة
+// 1. نظام المصادقة (Auth)
 // ==========================================
 let isLoginMode = true;
 
@@ -44,53 +59,88 @@ document.getElementById('auth-toggle').onclick = () => {
 document.getElementById('auth-btn').onclick = async () => {
   const email = document.getElementById('auth-email').value.trim();
   const pass = document.getElementById('auth-pass').value.trim();
+  
   if (!email || !pass) return toast('يرجى إدخال البريد وكلمة المرور');
 
-  document.getElementById('auth-btn').textContent = 'جاري التحميل...';
+  const btn = document.getElementById('auth-btn');
+  const originalText = btn.textContent;
+  
+  btn.textContent = 'جاري التحميل...';
+  btn.disabled = true;
 
-  if (isLoginMode) {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
-    if (error) toast('خطأ: ' + error.message);
-    else {
+  try {
+    if (isLoginMode) {
+      // تسجيل الدخول
+      const { data, error } = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password: pass }),
+        15000
+      );
+      
+      if (error) throw error;
+      
       currentUser = data.user;
       showScreen('profiles-screen');
       loadStudents();
-    }
-  } else {
-    const { data, error } = await supabase.auth.signUp({ email, password: pass });
-    if (error) toast('خطأ: ' + error.message);
-    else {
-      toast('تم إنشاء الحساب بنجاح! يرجى تسجيل الدخول.');
+      toast('تم تسجيل الدخول بنجاح');
+
+    } else {
+      // إنشاء حساب جديد
+      const { data, error } = await withTimeout(
+        supabase.auth.signUp({ email, password: pass }),
+        15000
+      );
+      
+      if (error) throw error;
+
+      toast('تم إنشاء الحساب بنجاح! يمكنك الآن تسجيل الدخول.');
+      
+      // التحويل التلقائي لوضع تسجيل الدخول
       isLoginMode = true;
       document.getElementById('auth-title').textContent = 'تسجيل الدخول';
-      document.getElementById('auth-btn').textContent = 'دخول';
       document.getElementById('auth-toggle').textContent = 'ليس لديك حساب؟ إنشاء حساب جديد';
     }
+  } catch (err) {
+    console.error('Auth Error:', err);
+    toast('خطأ: ' + (err.message || 'حدث خطأ غير متوقع. تحقق من Console.'));
+  } finally {
+    // هذا الجزء ينفذ دائماً حتى لو فشل الطلب
+    btn.textContent = isLoginMode ? 'دخول' : 'تسجيل';
+    btn.disabled = false;
   }
-  document.getElementById('auth-btn').textContent = isLoginMode ? 'دخول' : 'تسجيل';
 };
 
 document.getElementById('logout-btn').onclick = async () => {
-  await supabase.auth.signOut();
-  currentUser = null;
-  showScreen('auth-screen');
+  try {
+    await supabase.auth.signOut();
+    currentUser = null;
+    currentStudent = null;
+    showScreen('auth-screen');
+    document.getElementById('auth-email').value = '';
+    document.getElementById('auth-pass').value = '';
+  } catch (e) {
+    toast('حدث خطأ أثناء الخروج');
+  }
 };
 
-// التحقق من الجلسة
+// التحقق من الجلسة عند فتح الموقع
 async function checkSession() {
-  const { data } = await supabase.auth.getSession();
-  if (data.session) {
-    currentUser = data.session.user;
-    showScreen('profiles-screen');
-    loadStudents();
-  } else {
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (data.session) {
+      currentUser = data.session.user;
+      showScreen('profiles-screen');
+      loadStudents();
+    } else {
+      showScreen('auth-screen');
+    }
+  } catch (e) {
     showScreen('auth-screen');
   }
 }
 checkSession();
 
 // ==========================================
-// 2. إدارة الطلاب والمواد
+// 2. إدارة الطلاب
 // ==========================================
 window.loadSubjectsForGrade = function(grade) {
   const container = document.getElementById('subjects-container');
@@ -111,38 +161,45 @@ window.loadSubjectsForGrade = function(grade) {
 };
 
 async function loadStudents() {
-  const { data: students, error } = await supabase
-    .from('students')
-    .select('*')
-    .eq('parent_id', currentUser.id);
+  if (!currentUser) return;
+  
+  try {
+    const { data: students, error } = await supabase
+      .from('students')
+      .select('*')
+      .eq('parent_id', currentUser.id);
 
-  if (error) return toast('حدث خطأ في جلب الطلاب');
+    if (error) throw error;
 
-  const grid = document.getElementById('profiles-list');
-  const form = document.getElementById('add-student-form');
-  form.classList.add('hidden');
-  document.getElementById('profiles-list').classList.remove('hidden');
+    const grid = document.getElementById('profiles-list');
+    const form = document.getElementById('add-student-form');
+    form.classList.add('hidden');
+    document.getElementById('profiles-list').classList.remove('hidden');
 
-  grid.innerHTML = '';
-  students.forEach(std => {
-    grid.innerHTML += `
-      <div class="profile-card" onclick="selectStudent('${std.id}')">
-        <div class="profile-avatar">${std.full_name.charAt(0)}</div>
-        <div class="profile-name">${std.full_name.split(' ')[0]}</div>
-        <div class="profile-info">${std.grade} • ${std.age} سنة</div>
-        <div style="font-size:11px;margin-top:5px;color:${std.subscription_status === 'active' ? 'var(--good)' : 'var(--xp)'}">
-          ${std.subscription_status === 'active' ? '✅ مشترك' : '⏳ تجريبي'}
+    grid.innerHTML = '';
+    students.forEach(std => {
+      grid.innerHTML += `
+        <div class="profile-card" onclick="selectStudent('${std.id}')">
+          <div class="profile-avatar">${std.full_name.charAt(0)}</div>
+          <div class="profile-name">${std.full_name.split(' ')[0]}</div>
+          <div class="profile-info">${std.grade} • ${std.age} سنة</div>
+          <div style="font-size:11px;margin-top:5px;color:${std.subscription_status === 'active' ? 'var(--good)' : 'var(--xp)'}">
+            ${std.subscription_status === 'active' ? '✅ مشترك' : '⏳ تجريبي'}
+          </div>
         </div>
+      `;
+    });
+
+    grid.innerHTML += `
+      <div class="profile-card add-profile" onclick="showAddStudent()">
+        <div class="profile-avatar" style="background:transparent;border:2px dashed var(--line);color:var(--mut)">+</div>
+        <div class="profile-name" style="color:var(--mut)">إضافة طالب</div>
       </div>
     `;
-  });
-
-  grid.innerHTML += `
-    <div class="profile-card add-profile" onclick="showAddStudent()">
-      <div class="profile-avatar" style="background:transparent;border:2px dashed var(--line);color:var(--mut)">+</div>
-      <div class="profile-name" style="color:var(--mut)">إضافة طالب</div>
-    </div>
-  `;
+  } catch (err) {
+    console.error('Error loading students:', err);
+    toast('حدث خطأ في جلب بيانات الطلاب');
+  }
 }
 
 window.showAddStudent = function() {
@@ -164,52 +221,76 @@ document.getElementById('save-student-btn').onclick = async () => {
   if(!name || !age || !grade) return toast('يرجى ملء الحقول واختيار الصف');
   if(selectedSubjects.length === 0) return toast('يرجى اختيار مادة واحدة على الأقل');
 
-  document.getElementById('save-student-btn').textContent = 'جاري الحفظ...';
+  const btn = document.getElementById('save-student-btn');
+  const originalText = btn.textContent;
+  btn.textContent = 'جاري الحفظ...';
+  btn.disabled = true;
 
-  const { error } = await supabase.from('students').insert({
-    parent_id: currentUser.id,
-    full_name: name,
-    age: parseInt(age),
-    grade: grade,
-    selected_subjects: selectedSubjects
-  });
+  try {
+    const { error } = await withTimeout(
+      supabase.from('students').insert({
+        parent_id: currentUser.id,
+        full_name: name,
+        age: parseInt(age),
+        grade: grade,
+        selected_subjects: selectedSubjects
+      }),
+      10000
+    );
 
-  document.getElementById('save-student-btn').textContent = 'حفظ الحساب';
+    if (error) throw error;
 
-  if (error) return toast('حدث خطأ أثناء الإضافة');
-
-  document.getElementById('std-name').value = '';
-  document.getElementById('std-age').value = '';
-  document.getElementById('std-grade').value = '';
-  document.getElementById('subjects-container').style.display = 'none';
-  
-  loadStudents();
-  toast('تم إضافة الطالب بنجاح');
+    // تفريغ الحقول
+    document.getElementById('std-name').value = '';
+    document.getElementById('std-age').value = '';
+    document.getElementById('std-grade').value = '';
+    document.getElementById('subjects-container').style.display = 'none';
+    
+    loadStudents();
+    toast('تم إضافة الطالب بنجاح');
+  } catch (err) {
+    console.error('Error adding student:', err);
+    toast('حدث خطأ أثناء الإضافة: ' + err.message);
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
 };
 
 window.selectStudent = async function(id) {
-  const { data: student } = await supabase.from('students').select('*').eq('id', id).single();
-  if(!student) return toast('لم يتم العثور على الطالب');
-  
-  currentStudent = student;
+  try {
+    const { data: student, error: stdError } = await supabase.from('students').select('*').eq('id', id).single();
+    if (stdError) throw stdError;
+    
+    currentStudent = student;
 
-  let { data: progress } = await supabase.from('progress').select('*').eq('student_id', id).single();
-  
-  if (!progress) {
-    const { data: newProgress } = await supabase.from('progress').insert({ student_id: id }).select().single();
-    progress = newProgress;
+    // جلب التقدم أو إنشائه
+    let { data: progress, error: progError } = await supabase.from('progress').select('*').eq('student_id', id).single();
+    
+    if (progError && progError.code !== 'PGRST116') { // PGRST116 يعني أنه غير موجود
+      throw progError;
+    }
+
+    if (!progress) {
+      const { data: newProgress, error: createErr } = await supabase.from('progress').insert({ student_id: id }).select().single();
+      if (createErr) throw createErr;
+      progress = newProgress;
+    }
+
+    S = {
+      xp: progress.xp || 0,
+      streak: progress.streak || 0,
+      last: progress.last_active || "",
+      done: progress.completed_lessons || []
+    };
+
+    document.getElementById('app-student-name').textContent = currentStudent.full_name.split(' ')[0];
+    showScreen('app-screen');
+    home(); 
+  } catch (err) {
+    console.error('Error selecting student:', err);
+    toast('حدث خطأ في تحميل بيانات الطالب');
   }
-
-  S = {
-    xp: progress.xp,
-    streak: progress.streak,
-    last: progress.last_active || "",
-    done: progress.completed_lessons || []
-  };
-
-  document.getElementById('app-student-name').textContent = currentStudent.full_name.split(' ')[0];
-  showScreen('app-screen');
-  home(); 
 };
 
 document.getElementById('back-to-profiles').onclick = () => {
@@ -219,16 +300,20 @@ document.getElementById('back-to-profiles').onclick = () => {
 
 async function save() {
   if (!currentStudent) return;
-  await supabase.from('progress').update({
-    xp: S.xp,
-    streak: S.streak,
-    last_active: S.last ? new Date(S.last).toISOString() : null,
-    completed_lessons: S.done
-  }).eq('student_id', currentStudent.id);
+  try {
+    await supabase.from('progress').update({
+      xp: S.xp,
+      streak: S.streak,
+      last_active: S.last ? new Date(S.last).toISOString() : null,
+      completed_lessons: S.done
+    }).eq('student_id', currentStudent.id);
+  } catch (e) {
+    console.error('Error saving progress:', e);
+  }
 }
 
 // ==========================================
-// 3. محرك التعلم (دروس اللغة الإنجليزية)
+// 3. محرك التعلم (الدروس)
 // ==========================================
 var GW=[],GP=[],GQ=[],GL=[],PW=[];
 RAW.forEach(u=>{(u.w||[]).forEach(w=>GW.push(w[1]));(u.p||[]).forEach(p=>{GP.push(p[1]);p[0].split(' ').forEach(w=>{if(/^[a-z’]+$/.test(w)&&PW.indexOf(w)<0)PW.push(w)})});(u.qa||[]).forEach(a=>GQ.push(a[1]));(u.lt||[]).forEach(z=>{if(!GL.some(g=>g[0]==z[0]))GL.push(z)})});

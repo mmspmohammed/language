@@ -78,6 +78,58 @@ main{max-width:480px;margin:0 auto;padding-bottom:60px}
 .end{text-align:center;padding-top:50px}
 .end h2{font-size:28px;margin:0 0 6px}
 .big{font-size:56px;margin:0}
-#toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 18px;border-radius:999px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:30}
-#toast.show{opacity:1}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ==========================================
+   نظام الإشعارات المنبثقة الجديد (Toasts)
+   ========================================== */
+#toast-container {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  width: 90%;
+  max-width: 400px;
+}
+
+.toast-notification {
+  background: var(--card);
+  color: var(--ink);
+  padding: 14px 20px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  font-weight: 600;
+  border-right: 5px solid var(--line);
+  opacity: 0;
+  transform: translateY(-20px);
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+  pointer-events: auto;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+@media (prefers-color-scheme: dark) {
+  .toast-notification {
+    background: rgba(21, 41, 58, 0.9);
+  }
+}
+
+.toast-notification.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.toast-notification.success { border-right-color: var(--good); }
+.toast-notification.error { border-right-color: var(--bad); }
+.toast-notification.info { border-right-color: var(--pri); }
+
+.toast-icon { font-size: 20px; }

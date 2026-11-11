@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>خطوة — تعلّم الإنجليزية</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- شاشة تسجيل الدخول / إنشاء حساب -->
+<div id="auth-screen" class="screen active">
+  <div class="auth-container">
+    <div class="auth-card">
+      <h2 id="auth-title">تسجيل الدخول</h2>
+      <p style="text-align:center;font-size:14px;color:var(--mut);margin-top:-10px;margin-bottom:20px;">للمتابعة يرجى إدخال بياناتك</p>
+      <input type="email" id="auth-email" class="inp" placeholder="البريد الإلكتروني" dir="ltr">
+      <input type="password" id="auth-pass" class="inp" placeholder="كلمة المرور" dir="ltr">
+      <button id="auth-btn" class="btn-main">دخول</button>
+      <div id="auth-toggle" class="toggle-auth">ليس لديك حساب؟ إنشاء حساب جديد</div>
+    </div>
+  </div>
+</div>
+
+<!-- شاشة إدارة الطلاب -->
+<div id="profiles-screen" class="screen">
+  <div class="top">
+    <b>حسابات الطلاب</b>
+    <button id="logout-btn" class="switch-btn">تسجيل الخروج</button>
+  </div>
+  <div class="auth-container">
+    <h3 style="margin-bottom:5px;">مرحباً بك 👋</h3>
+    <p style="font-size:14px;color:var(--mut);margin-top:0;">اختر حساب طالب للبدء، أو أضف حساباً جديداً.</p>
+  </div>
+  <div id="profiles-list" class="profile-grid"></div>
+  
+  <!-- فورم إضافة طالب جديد -->
+  <div id="add-student-form" class="auth-container hidden">
+    <div class="auth-card">
+      <button id="cancel-add" class="back-btn">← إلغاء</button>
+      <h3 style="margin-top:0;text-align:center;">إضافة طالب جديد</h3>
+      
+      <input type="text" id="std-name" class="inp" placeholder="الاسم الثلاثي">
+      <input type="number" id="std-age" class="inp" placeholder="العمر">
+      
+      <!-- قائمة الصفوف -->
+      <select id="std-grade" class="inp" onchange="loadSubjectsForGrade(this.value)">
+        <option value="" disabled selected>اختر الصف الدراسي</option>
+        <option value="الأول">الصف الأول</option>
+        <option value="الثاني">الصف الثاني</option>
+        <option value="الثالث">الصف الثالث</option>
+        <option value="الرابع">الصف الرابع</option>
+        <option value="الخامس">الصف الخامس</option>
+        <option value="السادس">الصف السادس</option>
+        <option value="السابع">الصف السابع</option>
+        <option value="الثامن">الصف الثامن</option>
+        <option value="التاسع">الصف التاسع</option>
+        <option value="العاشر">الصف العاشر</option>
+        <option value="الحادي عشر">الحادي عشر</option>
+        <option value="البكالوريا">البكالوريا</option>
+      </select>
+
+      <!-- حاوية اختيار المواد -->
+      <div id="subjects-container" style="margin-bottom:15px; display:none;">
+        <p style="font-size:14px; margin-bottom:8px; font-weight:600;">اختر المواد التي تريد دراستها:</p>
+        <div id="subjects-checkboxes" style="display:flex; flex-wrap:wrap; gap:10px;">
+          <!-- سيتم توليد الـ Checkboxes هنا -->
+        </div>
+      </div>
+
+      <button id="save-student-btn" class="btn-main">حفظ الحساب</button>
+    </div>
+  </div>
+</div>
+
+<!-- شاشة التطبيق الرئيسية -->
+<div id="app-screen" class="screen">
+  <div class="top">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button id="back-to-profiles" class="switch-btn" title="تغيير الطالب">⇄</button>
+      <b id="app-student-name">خطوة</b>
+    </div>
+    <div class="chips">
+      <span class="chip" id="cs">🔥 0</span>
+      <span class="chip" id="cx">⭐ 0</span>
+    </div>
+  </div>
+  
+  <!-- تم إزالة شريط الصفوف من هنا -->
+  
+  <main id="path"></main>
+</div>
+
+<!-- قسم التمارين المنبثق -->
+<section id="L" aria-live="polite"></section>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script src="js/lessons.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

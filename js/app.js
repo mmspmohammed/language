@@ -1,11 +1,15 @@
 // ==========================================
-// المتغيرات الأساسية
+// التحقق من الاتصال
 // ==========================================
+if (typeof sb === 'undefined' || !sb) {
+    document.body.innerHTML = "<h2 style='text-align:center;margin-top:50px;color:red;'>فشل الاتصال بقاعدة البيانات. يرجى تحديث الصفحة أو مراجعة إعدادات supabase.js</h2>";
+    throw new Error("Supabase client is not initialized.");
+}
+
 let currentUser = null;
 let currentStudent = null;
 let S = { xp: 0, streak: 0, last: "", done: [] };
 
-// المواد المتاحة لكل صف
 const SUBJECTS_BY_GRADE = {
   "الأول": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
   "الثاني": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
@@ -21,9 +25,6 @@ const SUBJECTS_BY_GRADE = {
   "البكالوريا": ["اللغة الإنجليزية", "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء"]
 };
 
-// ==========================================
-// دوال مساعدة
-// ==========================================
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -33,14 +34,13 @@ function toast(m) {
   var t = document.getElementById("toast");
   t.textContent = m; 
   t.className = "show";
-  setTimeout(function() { t.className = ""; }, 3000);
+  setTimeout(function() { t.className = ""; }, 3500);
 }
 
-// دالة لإضافة مهلة زمنية للطلبات (لمنع التعليق)
 const withTimeout = (promise, ms) => {
   return Promise.race([
     promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('انتهت مهلة الاتصال. يرجى التحقق من الإنترنت أو إعدادات سوبابيز.')), ms))
+    new Promise((_, reject) => setTimeout(() => reject(new Error('انتهت مهلة الاتصال. يرجى التحقق من الإنترنت.')), ms))
   ]);
 };
 
@@ -70,9 +70,9 @@ document.getElementById('auth-btn').onclick = async () => {
 
   try {
     if (isLoginMode) {
-      // تسجيل الدخول
+      // تسجيل الدخول باستخدام sb
       const { data, error } = await withTimeout(
-        supabase.auth.signInWithPassword({ email, password: pass }),
+        sb.auth.signInWithPassword({ email, password: pass }),
         15000
       );
       
@@ -84,9 +84,9 @@ document.getElementById('auth-btn').onclick = async () => {
       toast('تم تسجيل الدخول بنجاح');
 
     } else {
-      // إنشاء حساب جديد
+      // إنشاء حساب جديد باستخدام sb
       const { data, error } = await withTimeout(
-        supabase.auth.signUp({ email, password: pass }),
+        sb.auth.signUp({ email, password: pass }),
         15000
       );
       
@@ -94,16 +94,14 @@ document.getElementById('auth-btn').onclick = async () => {
 
       toast('تم إنشاء الحساب بنجاح! يمكنك الآن تسجيل الدخول.');
       
-      // التحويل التلقائي لوضع تسجيل الدخول
       isLoginMode = true;
       document.getElementById('auth-title').textContent = 'تسجيل الدخول';
       document.getElementById('auth-toggle').textContent = 'ليس لديك حساب؟ إنشاء حساب جديد';
     }
   } catch (err) {
     console.error('Auth Error:', err);
-    toast('خطأ: ' + (err.message || 'حدث خطأ غير متوقع. تحقق من Console.'));
+    toast('خطأ: ' + (err.message || 'حدث خطأ غير متوقع.'));
   } finally {
-    // هذا الجزء ينفذ دائماً حتى لو فشل الطلب
     btn.textContent = isLoginMode ? 'دخول' : 'تسجيل';
     btn.disabled = false;
   }
@@ -111,7 +109,7 @@ document.getElementById('auth-btn').onclick = async () => {
 
 document.getElementById('logout-btn').onclick = async () => {
   try {
-    await supabase.auth.signOut();
+    await sb.auth.signOut();
     currentUser = null;
     currentStudent = null;
     showScreen('auth-screen');
@@ -122,10 +120,9 @@ document.getElementById('logout-btn').onclick = async () => {
   }
 };
 
-// التحقق من الجلسة عند فتح الموقع
 async function checkSession() {
   try {
-    const { data } = await supabase.auth.getSession();
+    const { data } = await sb.auth.getSession();
     if (data.session) {
       currentUser = data.session.user;
       showScreen('profiles-screen');
@@ -164,7 +161,7 @@ async function loadStudents() {
   if (!currentUser) return;
   
   try {
-    const { data: students, error } = await supabase
+    const { data: students, error } = await sb
       .from('students')
       .select('*')
       .eq('parent_id', currentUser.id);
@@ -228,7 +225,7 @@ document.getElementById('save-student-btn').onclick = async () => {
 
   try {
     const { error } = await withTimeout(
-      supabase.from('students').insert({
+      sb.from('students').insert({
         parent_id: currentUser.id,
         full_name: name,
         age: parseInt(age),
@@ -240,7 +237,6 @@ document.getElementById('save-student-btn').onclick = async () => {
 
     if (error) throw error;
 
-    // تفريغ الحقول
     document.getElementById('std-name').value = '';
     document.getElementById('std-age').value = '';
     document.getElementById('std-grade').value = '';
@@ -259,20 +255,19 @@ document.getElementById('save-student-btn').onclick = async () => {
 
 window.selectStudent = async function(id) {
   try {
-    const { data: student, error: stdError } = await supabase.from('students').select('*').eq('id', id).single();
+    const { data: student, error: stdError } = await sb.from('students').select('*').eq('id', id).single();
     if (stdError) throw stdError;
     
     currentStudent = student;
 
-    // جلب التقدم أو إنشائه
-    let { data: progress, error: progError } = await supabase.from('progress').select('*').eq('student_id', id).single();
+    let { data: progress, error: progError } = await sb.from('progress').select('*').eq('student_id', id).single();
     
-    if (progError && progError.code !== 'PGRST116') { // PGRST116 يعني أنه غير موجود
+    if (progError && progError.code !== 'PGRST116') {
       throw progError;
     }
 
     if (!progress) {
-      const { data: newProgress, error: createErr } = await supabase.from('progress').insert({ student_id: id }).select().single();
+      const { data: newProgress, error: createErr } = await sb.from('progress').insert({ student_id: id }).select().single();
       if (createErr) throw createErr;
       progress = newProgress;
     }
@@ -301,7 +296,7 @@ document.getElementById('back-to-profiles').onclick = () => {
 async function save() {
   if (!currentStudent) return;
   try {
-    await supabase.from('progress').update({
+    await sb.from('progress').update({
       xp: S.xp,
       streak: S.streak,
       last_active: S.last ? new Date(S.last).toISOString() : null,
@@ -359,7 +354,6 @@ function home(){
  document.getElementById("cs").textContent="🔥 "+S.streak;
  document.getElementById("cx").textContent="⭐ "+S.xp;
  
- // التحقق من الصف والمواد المختارة
  const isEnglishSelected = currentStudent.selected_subjects.includes("اللغة الإنجليزية");
  const isFirstGrade = currentStudent.grade === "الأول";
 

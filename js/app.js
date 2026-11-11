@@ -25,16 +25,31 @@ const SUBJECTS_BY_GRADE = {
   "البكالوريا": ["اللغة الإنجليزية", "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء"]
 };
 
+// ==========================================
+// دالة الإشعارات الجديدة
+// ==========================================
+function toast(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = `toast-notification ${type}`;
+  
+  let icon = 'ℹ️';
+  if (type === 'success') icon = '✅';
+  if (type === 'error') icon = '❌';
+
+  el.innerHTML = `<span class="toast-icon">${icon}</span> <span class="toast-msg">${msg}</span>`;
+  container.appendChild(el);
+
+  setTimeout(() => el.classList.add('show'), 10);
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 300);
+  }, 3500);
+}
+
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-}
-
-function toast(m) {
-  var t = document.getElementById("toast");
-  t.textContent = m; 
-  t.className = "show";
-  setTimeout(function() { t.className = ""; }, 3500);
 }
 
 const withTimeout = (promise, ms) => {
@@ -60,7 +75,7 @@ document.getElementById('auth-btn').onclick = async () => {
   const email = document.getElementById('auth-email').value.trim();
   const pass = document.getElementById('auth-pass').value.trim();
   
-  if (!email || !pass) return toast('يرجى إدخال البريد وكلمة المرور');
+  if (!email || !pass) return toast('يرجى إدخال البريد وكلمة المرور', 'info');
 
   const btn = document.getElementById('auth-btn');
   const originalText = btn.textContent;
@@ -70,7 +85,6 @@ document.getElementById('auth-btn').onclick = async () => {
 
   try {
     if (isLoginMode) {
-      // تسجيل الدخول باستخدام sb
       const { data, error } = await withTimeout(
         sb.auth.signInWithPassword({ email, password: pass }),
         15000
@@ -81,10 +95,9 @@ document.getElementById('auth-btn').onclick = async () => {
       currentUser = data.user;
       showScreen('profiles-screen');
       loadStudents();
-      toast('تم تسجيل الدخول بنجاح');
+      toast('تم تسجيل الدخول بنجاح', 'success');
 
     } else {
-      // إنشاء حساب جديد باستخدام sb
       const { data, error } = await withTimeout(
         sb.auth.signUp({ email, password: pass }),
         15000
@@ -92,7 +105,7 @@ document.getElementById('auth-btn').onclick = async () => {
       
       if (error) throw error;
 
-      toast('تم إنشاء الحساب بنجاح! يمكنك الآن تسجيل الدخول.');
+      toast('تم إنشاء الحساب بنجاح! يمكنك الآن تسجيل الدخول.', 'success');
       
       isLoginMode = true;
       document.getElementById('auth-title').textContent = 'تسجيل الدخول';
@@ -100,7 +113,7 @@ document.getElementById('auth-btn').onclick = async () => {
     }
   } catch (err) {
     console.error('Auth Error:', err);
-    toast('خطأ: ' + (err.message || 'حدث خطأ غير متوقع.'));
+    toast('خطأ: ' + (err.message || 'حدث خطأ غير متوقع.'), 'error');
   } finally {
     btn.textContent = isLoginMode ? 'دخول' : 'تسجيل';
     btn.disabled = false;
@@ -116,7 +129,7 @@ document.getElementById('logout-btn').onclick = async () => {
     document.getElementById('auth-email').value = '';
     document.getElementById('auth-pass').value = '';
   } catch (e) {
-    toast('حدث خطأ أثناء الخروج');
+    toast('حدث خطأ أثناء الخروج', 'error');
   }
 };
 
@@ -195,7 +208,7 @@ async function loadStudents() {
     `;
   } catch (err) {
     console.error('Error loading students:', err);
-    toast('حدث خطأ في جلب بيانات الطلاب');
+    toast('حدث خطأ في جلب بيانات الطلاب', 'error');
   }
 }
 
@@ -215,8 +228,8 @@ document.getElementById('save-student-btn').onclick = async () => {
   const grade = document.getElementById('std-grade').value;
   const selectedSubjects = Array.from(document.querySelectorAll('.subject-cb:checked')).map(cb => cb.value);
 
-  if(!name || !age || !grade) return toast('يرجى ملء الحقول واختيار الصف');
-  if(selectedSubjects.length === 0) return toast('يرجى اختيار مادة واحدة على الأقل');
+  if(!name || !age || !grade) return toast('يرجى ملء الحقول واختيار الصف', 'info');
+  if(selectedSubjects.length === 0) return toast('يرجى اختيار مادة واحدة على الأقل', 'info');
 
   const btn = document.getElementById('save-student-btn');
   const originalText = btn.textContent;
@@ -243,10 +256,10 @@ document.getElementById('save-student-btn').onclick = async () => {
     document.getElementById('subjects-container').style.display = 'none';
     
     loadStudents();
-    toast('تم إضافة الطالب بنجاح');
+    toast('تم إضافة الطالب بنجاح', 'success');
   } catch (err) {
     console.error('Error adding student:', err);
-    toast('حدث خطأ أثناء الإضافة: ' + err.message);
+    toast('حدث خطأ أثناء الإضافة: ' + err.message, 'error');
   } finally {
     btn.textContent = originalText;
     btn.disabled = false;
@@ -284,7 +297,7 @@ window.selectStudent = async function(id) {
     home(); 
   } catch (err) {
     console.error('Error selecting student:', err);
-    toast('حدث خطأ في تحميل بيانات الطالب');
+    toast('حدث خطأ في تحميل بيانات الطالب', 'error');
   }
 };
 
@@ -384,7 +397,7 @@ function home(){
 document.getElementById("path").onclick=function(e){
  var n=e.target.closest(".node");
  if(!n)return;
- if(n.classList.contains("lock")){toast(+n.dataset.l==0?"انجح في اختبار الوحدة السابقة أولاً":"أكمل الدرس السابق أولاً");return}
+ if(n.classList.contains("lock")){toast(+n.dataset.l==0?"انجح في اختبار الوحدة السابقة أولاً":"أكمل الدرس السابق أولاً", 'info');return}
  start(+n.dataset.u,+n.dataset.l)
 };
 

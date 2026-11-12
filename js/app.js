@@ -50,49 +50,36 @@ function pk2(a,b,n,ex){var r=pk(a,n,ex);return r.length<n?r.concat(pk(b,n-r.leng
 function say(t){try{speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t.replace(/[^\x00-\x7F’]/g,""));u.lang="en-US";speechSynthesis.speak(u)}catch(e){}}
 
 // ==========================================
-// 3. محرك توليد التمارين (مخصص للمواد الاجتماعية)
+// 3. محرك توليد التمارين
 // ==========================================
 function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, subject) {
   const L = [], W = lessonData.w || [], P = lessonData.p || [];
   const wa = W.map(w => w[1]), pa = P.map(p => p[1]);
   const isArabic = (subject === "الدراسات الاجتماعية" || subject === "اللغة العربية" || subject === "الاجتماعيات");
   
-  // 1. المصطلحات والمفاهيم
   if (W.length > 0) {
     let q = [];
     W.forEach(w => {
-      // تمرين اختر التعريف
       q.push(['mc', w[0], w[1], pk2(wa, allWordsAr, 2, [w[1]])]);
-      
-      // تمرين صح وخطأ
       let isTrue = Math.random() > 0.5;
       let randomAr = isTrue ? w[1] : (pk2(wa, allWordsAr, 1, [w[1]])[0] || 'غير معروف');
       q.push(['tf', w[0], randomAr, isTrue ? 'true' : 'false']);
-      
-      if (!isArabic) {
-          q.push(['ls', w[0], w[0], pk(W.map(z=>z[0]), 2, [w[0]])]);
-      }
+      if (!isArabic) q.push(['ls', w[0], w[0], pk(W.map(z=>z[0]), 2, [w[0]])]);
     });
     L.push({n: 'المصطلحات والمفاهيم', c: W.map(w => [(w[2] || '') + ' ' + w[0], w[1]]), q: q});
   }
 
-  // 2. المعلومات والأسئلة
   if (P.length > 0) {
     let q = [];
     P.forEach(p => {
-      // تمرين اختيار الجواب الصحيح
       q.push(['mc', p[0], p[1], pk2(pa, allSentencesAr, 2, [p[1]])]);
-      
-      // تمرين صح وخطأ
       let isTrue = Math.random() > 0.5;
       let randomAr = isTrue ? p[1] : (pk2(pa, allSentencesAr, 1, [p[1]])[0] || 'غير معروف');
       q.push(['tf', p[0], randomAr, isTrue ? 'true' : 'false']);
       
-      // تمرين أكمل الفراغ (خاص باللغة العربية والمواد الاجتماعية)
       if (isArabic) {
           q.push(['fb', p[0] + ' .....', p[1], pk2(pa, allSentencesAr, 3, [p[1]])]);
       } else {
-          // للغة الإنجليزية نستخدم الطريقة القديمة (ترتيب كلمات وأكمل فراغ)
           let t = p[0].split(' ');
           if (t.length > 2 && t.length < 8) {
             q.push(['bw', p[1], p[0], pk(allWordsEn, 2, t.map(x => x.toLowerCase().replace(/[.,!?]/g, '')))]);
@@ -114,13 +101,12 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
     L.push({n: 'الأسئلة والمعلومات', c: P, q: q});
   }
 
-  // تجميع كل الأسئلة للاختبار
   const allQs = [].concat(...L.map(l => l.q));
   return { cards: L.flatMap(l => l.c), questions: allQs };
 }
 
 // ==========================================
-// 4. جلب المنهاج من قاعدة البيانات
+// 4. جلب المنهاج
 // ==========================================
 async function loadCurriculumFromDB(grade, subject) {
   try {
@@ -154,7 +140,6 @@ async function loadCurriculumFromDB(grade, subject) {
         const w = vocab.filter(v => v.lesson_id === lesson.id).map(v => [v.word_en, v.word_ar, v.emoji]);
         const p = sentences.filter(s => s.lesson_id === lesson.id).map(s => [s.sentence_en, s.sentence_ar]);
 
-        // تقسيم المحتوى لعدة دوائر (Nodes)
         if (w.length > 0) {
             uiLessons.push(createLessonObj('المفاهيم والمصطلحات', w, []));
             if (p.length > 0) uiLessons.push(createLessonObj('أسئلة وأجوبة', [], p));
@@ -198,7 +183,7 @@ async function loadCurriculumFromDB(grade, subject) {
 }
 
 // ==========================================
-// 5. المصادقة وإدارة الطلاب (مختصر)
+// 5. المصادقة وإدارة الطلاب
 // ==========================================
 let isLoginMode = true;
 document.getElementById('auth-toggle').onclick = () => {

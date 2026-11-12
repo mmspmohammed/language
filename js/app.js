@@ -345,6 +345,88 @@ window.selectStudent = async function(id) {
     }
 
     S = { xp: progress.xp || 0, streak: progress.streak || 0, last: progress.last_active || "", done: progress.completed_lessons || [] };
+    
+    // إعداد شاشة المواد
+    const studentFirstName = currentStudent.full_name.split(' ')[0];
+    document.getElementById('subjects-student-name').textContent = studentFirstName + ' - المواد';
+    document.getElementById('subjects-student-greeting').textContent = studentFirstName;
+    
+    const subjects = currentStudent.selected_subjects || [];
+    const grid = document.getElementById('subjects-grid');
+    
+    if (subjects.length === 0) {
+      grid.innerHTML = '<p style="text-align:center;color:var(--mut);padding:20px;">لم يتم اختيار أي مادة لهذا الطالب.</p>';
+    } else {
+      const icons = {
+        "اللغة الإنجليزية": "🇬🇧",
+        "الرياضيات": "🔢",
+        "اللغة العربية": "📖",
+        "العلوم": "🔬",
+        "الاجتماعيات": "🌍",
+        "الفيزياء": "⚛️",
+        "الكيمياء": "🧪",
+        "الأحياء": "🧬"
+      };
+      
+      grid.innerHTML = subjects.map(sub => `
+        <div class="profile-card" onclick="openSubject('${sub}')">
+          <div class="profile-avatar" style="font-size:32px;">${icons[sub] || '📚'}</div>
+          <div class="profile-name">${sub}</div>
+        </div>
+      `).join('');
+    }
+    
+    showScreen('subjects-screen');
+  } catch (err) { toast('حدث خطأ في تحميل بيانات الطالب', 'error'); }
+};
+
+// دالة فتح مادة معينة وعرض دروسها
+window.openSubject = async function(subjectName) {
+    document.getElementById('app-student-name').textContent = currentStudent.full_name.split(' ')[0] + ' • ' + subjectName;
+    showScreen('app-screen');
+    document.getElementById('path').innerHTML = '<div style="text-align:center;margin-top:50px;color:var(--mut);">⏳ جاري تحميل المنهاج...</div>';
+
+    const isEnglish = (subjectName === "اللغة الإنجليزية");
+    const isSupportedGrade = (currentStudent.grade === "الأول" || currentStudent.grade === "الرابع" || currentStudent.grade === "السابع");
+
+    if (isEnglish && isSupportedGrade) {
+        const loaded = await loadCurriculumFromDB(currentStudent.grade, subjectName);
+        if (!loaded) {
+            document.getElementById('path').innerHTML = `
+              <div style="text-align:center; padding:50px 20px; color:var(--mut);">
+                <p style="font-size:50px; margin:0;">🚧</p>
+                <h2 style="margin:10px 0;">المنهاج قيد الإعداد</h2>
+                <p>لم نتمكن من العثور على دروس لمادة <b>${subjectName}</b> للصف <b>${currentStudent.grade}</b> في قاعدة البيانات.</p>
+              </div>
+            `;
+            return;
+        }
+    } else {
+        document.getElementById('path').innerHTML = `
+            <div style="text-align:center; padding:50px 20px; color:var(--mut);">
+                <p style="font-size:50px; margin:0;">🚧</p>
+                <h2 style="margin:10px 0;">المنهاج قيد الإعداد</h2>
+                <p>نحن نعمل حالياً على إضافة منهاج مادة <b>${subjectName}</b> للصف <b>${currentStudent.grade}</b>.</p>
+                <p>يرجى العودة قريباً!</p>
+            </div>
+        `;
+        return;
+    }
+
+    home();
+};
+
+// زر الرجوع من الدروس ← يعود لشاشة المواد
+document.getElementById('back-to-profiles').onclick = () => { 
+    showScreen('subjects-screen'); 
+};
+
+// زر الرجوع من المواد ← يعود لشاشة الحسابات
+document.getElementById('back-to-profiles-from-subjects').onclick = () => { 
+    showScreen('profiles-screen'); 
+    loadStudents(); 
+};
+    S = { xp: progress.xp || 0, streak: progress.streak || 0, last: progress.last_active || "", done: progress.completed_lessons || [] };
     document.getElementById('app-student-name').textContent = currentStudent.full_name.split(' ')[0];
     
     showScreen('app-screen');

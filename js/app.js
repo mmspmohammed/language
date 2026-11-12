@@ -1,15 +1,15 @@
 // ==========================================
-// التحقق من الاتصال
+// 1. الإعدادات والمتغيرات الأساسية
 // ==========================================
 if (typeof sb === 'undefined' || !sb) {
-    document.body.innerHTML = "<h2 style='text-align:center;margin-top:50px;color:red;'>فشل الاتصال بقاعدة البيانات. يرجى تحديث الصفحة.</h2>";
+    document.body.innerHTML = "<h2 style='text-align:center;margin-top:50px;color:red;'>فشل الاتصال بقاعدة البيانات. يرجى تحديث الصفحة أو مراجعة إعدادات supabase.js</h2>";
     throw new Error("Supabase client is not initialized.");
 }
 
 let currentUser = null;
 let currentStudent = null;
 let S = { xp: 0, streak: 0, last: "", done: [] };
-let U = []; // سيتم تعبئتها من قاعدة البيانات
+let U = []; // سيتم تعبئتها بالمنهاج من قاعدة البيانات
 
 const SUBJECTS_BY_GRADE = {
   "الأول": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
@@ -26,6 +26,15 @@ const SUBJECTS_BY_GRADE = {
   "البكالوريا": ["اللغة الإنجليزية", "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء"]
 };
 
+// ==========================================
+// 2. دوال مساعدة (Helpers)
+// ==========================================
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// نظام الإشعارات المنبثقة
 function toast(msg, type = 'info') {
   const container = document.getElementById('toast-container');
   const el = document.createElement('div');
@@ -37,29 +46,24 @@ function toast(msg, type = 'info') {
   setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 3500);
 }
 
-function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-}
-
 const withTimeout = (promise, ms) => {
   return Promise.race([
     promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('انتهت مهلة الاتصال.')), ms))
+    new Promise((_, reject) => setTimeout(() => reject(new Error('انتهت مهلة الاتصال. يرجى التحقق من الإنترنت.')), ms))
   ]);
 };
 
-// ==========================================
-// دوال توليد التمارين (نفس المحرك القديم)
-// ==========================================
 function shuf(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t}return a}
 function pk(a,n,ex){return shuf(a.filter((x,i)=>a.indexOf(x)==i&&ex.indexOf(x)<0)).slice(0,n)}
 function pk2(a,b,n,ex){var r=pk(a,n,ex);return r.length<n?r.concat(pk(b,n-r.length,ex.concat(r))):r}
+function say(t){try{speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t.replace(/[^\x00-\x7F’]/g,""));u.lang="en-US";speechSynthesis.speak(u)}catch(e){}}
 
-// دالة توليد التمارين لدرس معين بناءً على بياناته
+// ==========================================
+// 3. محرك توليد التمارين من بيانات قاعدة البيانات
+// ==========================================
 function generateExercises(lessonData, allWords, allSentences) {
-  const L = [], W = lessonData.w || [], P = lessonData.p || [], Q = lessonData.qa || [];
-  const wa = W.map(w => w[1]), pa = P.map(p => p[1]), i;
+  const L = [], W = lessonData.w || [], P = lessonData.p || [];
+  const wa = W.map(w => w[1]), pa = P.map(p => p[1]);
   
   // 1. المفردات (اختيار من متعدد + استماع)
   if (W.length > 0) {
@@ -80,13 +84,12 @@ function generateExercises(lessonData, allWords, allSentences) {
     L.push({n: 'الجمل', c: P, q: q});
   }
 
-  // تجميع كل الأسئلة
   const allQs = [].concat(...L.map(l => l.q));
   return { cards: L.flatMap(l => l.c), questions: allQs };
 }
 
 // ==========================================
-// دالة جلب المنهاج من قاعدة البيانات
+// 4. جلب المنهاج من قاعدة البيانات (Supabase)
 // ==========================================
 async function loadCurriculumFromDB(grade, subject) {
   try {
@@ -104,11 +107,11 @@ async function loadCurriculumFromDB(grade, subject) {
     const { data: vocab } = await sb.from('vocabulary').select('*').in('lesson_id', lessonIds).order('order_num');
     const { data: sentences } = await sb.from('sentences').select('*').in('lesson_id', lessonIds).order('order_num');
 
-    // قوائم مساعدة
+    // قوائم مساعدة لبناء الخيارات الخاطئة
     const allVocabAr = vocab.map(v => v.word_ar);
     const allSentAr = sentences.map(s => s.sentence_ar);
 
-    // 4. بناء هيكل البيانات المطلوب للتطبيق
+    // 4. بناء الهيكل
     U = units.map(unit => {
       const unitLessons = lessons.filter(l => l.unit_id === unit.id);
       
@@ -126,7 +129,7 @@ async function loadCurriculumFromDB(grade, subject) {
         };
       });
 
-      // إضافة تدريب النطق لكل وحدة
+      // إضافة تدريب النطق لكل وحدة (بناءً على كلمات الوحدة)
       const allCards = uiLessons.flatMap(l => l.c);
       const uniqueCards = [];
       const seen = new Set();
@@ -154,7 +157,7 @@ async function loadCurriculumFromDB(grade, subject) {
 }
 
 // ==========================================
-// 1. نظام المصادقة (Auth)
+// 5. نظام المصادقة (Auth)
 // ==========================================
 let isLoginMode = true;
 
@@ -214,7 +217,7 @@ async function checkSession() {
 checkSession();
 
 // ==========================================
-// 2. إدارة الطلاب
+// 6. إدارة الطلاب
 // ==========================================
 window.loadSubjectsForGrade = function(grade) {
   const container = document.getElementById('subjects-container');
@@ -245,6 +248,9 @@ async function loadStudents() {
           <div class="profile-avatar">${std.full_name.charAt(0)}</div>
           <div class="profile-name">${std.full_name.split(' ')[0]}</div>
           <div class="profile-info">${std.grade} • ${std.age} سنة</div>
+          <div style="font-size:11px;margin-top:5px;color:${std.subscription_status === 'active' ? 'var(--good)' : 'var(--xp)'}">
+            ${std.subscription_status === 'active' ? '✅ مشترك' : '⏳ تجريبي'}
+          </div>
         </div>
       `;
     });
@@ -307,21 +313,21 @@ window.selectStudent = async function(id) {
     S = { xp: progress.xp || 0, streak: progress.streak || 0, last: progress.last_active || "", done: progress.completed_lessons || [] };
     document.getElementById('app-student-name').textContent = currentStudent.full_name.split(' ')[0];
     
-    // جلب المنهاج قبل عرض الشاشة
     showScreen('app-screen');
     document.getElementById('path').innerHTML = '<div style="text-align:center;margin-top:50px;color:var(--mut);">⏳ جاري تحميل المنهاج...</div>';
     
     const isEnglishSelected = currentStudent.selected_subjects.includes("اللغة الإنجليزية");
-    const isFirstGrade = currentStudent.grade === "الأول"; // يمكنك تعديل هذا لاحقاً
+    // دعم الصف الأول والسابع
+    const isSupportedGrade = (currentStudent.grade === "الأول" || currentStudent.grade === "السابع");
 
-    if (isEnglishSelected && isFirstGrade) {
+    if (isEnglishSelected && isSupportedGrade) {
       const loaded = await loadCurriculumFromDB(currentStudent.grade, "اللغة الإنجليزية");
       if (!loaded) {
-        document.getElementById('path').innerHTML = '<div style="text-align:center;margin-top:50px;">لا توجد دروس متاحة لهذا الصف حالياً.</div>';
+        document.getElementById('path').innerHTML = '<div style="text-align:center;margin-top:50px;">لا توجد دروس متاحة لهذا الصف حالياً في قاعدة البيانات.</div>';
         return;
       }
     } else {
-       document.getElementById('path').innerHTML = '<div style="text-align:center;margin-top:50px;">المنهاج قيد الإعداد.</div>';
+       document.getElementById('path').innerHTML = '<div style="text-align:center;margin-top:50px;">المنهاج قيد الإعداد لهذا الصف أو المادة.</div>';
        return;
     }
 
@@ -339,10 +345,9 @@ async function save() {
 }
 
 // ==========================================
-// 3. محرك عرض الدروس والتمارين
+// 7. محرك عرض الدروس والتمارين
 // ==========================================
 var cur=null,$=function(s){return document.querySelector(s)};
-function say(t){try{speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t.replace(/[^\x00-\x7F’]/g,""));u.lang="en-US";speechSynthesis.speak(u)}catch(e){}}
 
 function home(){
  if(!currentStudent) return;
@@ -372,7 +377,7 @@ function start(u,l){
  cur={id:u+"-"+l,u:u,l:l,t:!!ls.test,qs:ls.test?shuf(ls.pool).slice(0,10):ls.q,i:0,h:5,ok:0};
  $("#L").className="open";
  if(!ls.c.length){q();return}
- $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"></div></div><div class="lb"><h3>'+ls.n+'</h3><p>اضغط 🔊 لتسمع</p>'+ls.c.map(function(c,i){return '<div class="card"><b dir="ltr">'+c[0]+'</b><span>'+c[1]+'</span><button class="sp" data-s="'+i+'">🔊</button></div>'}).join("")+'</div><div class="lf"><div><button class="btn" id="go">ابدأ التمارين</button></div></div>';
+ $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"></div></div><div class="lb"><h3>'+ls.n+'</h3><p>اضغط 🔊 لتسمع، ثم كرّر بصوتك</p>'+ls.c.map(function(c,i){return '<div class="card"><b dir="ltr">'+c[0]+'</b><span>'+c[1]+'</span><button class="sp" data-s="'+i+'">🔊</button></div>'}).join("")+'</div><div class="lf"><div><button class="btn" id="go">ابدأ التمارين</button></div></div>';
  $("#cl").onclick=close; $("#go").onclick=function(){q()};
  $(".lb").onclick=function(e){var b=e.target.closest("[data-s]");if(b)say(ls.c[+b.dataset.s][0])}
 }

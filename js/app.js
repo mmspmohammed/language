@@ -9,7 +9,7 @@ if (typeof sb === 'undefined' || !sb) {
 let currentUser = null;
 let currentStudent = null;
 let S = { xp: 0, streak: 0, last: "", done: [] };
-let U = []; 
+let U = []; // سيتم تعبئتها بالمنهاج من قاعدة البيانات
 
 const SUBJECTS_BY_GRADE = {
   "الأول": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
@@ -27,15 +27,17 @@ const SUBJECTS_BY_GRADE = {
 };
 
 // ==========================================
-// 2. دوال مساعدة
+// 2. دوال مساعدة (Helpers)
 // ==========================================
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
 
+// نظام الإشعارات المنبثقة
 function toast(msg, type = 'info') {
   const container = document.getElementById('toast-container');
+  if (!container) return;
   const el = document.createElement('div');
   el.className = `toast-notification ${type}`;
   let icon = 'ℹ️'; if (type === 'success') icon = '✅'; if (type === 'error') icon = '❌';
@@ -64,6 +66,7 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn) {
   const L = [], W = lessonData.w || [], P = lessonData.p || [];
   const wa = W.map(w => w[1]), pa = P.map(p => p[1]);
   
+  // 1. المفردات
   if (W.length > 0) {
     let q = [];
     W.forEach(w => {
@@ -77,6 +80,7 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn) {
     L.push({n: 'المفردات', c: W.map(w => [(w[2] || '') + ' ' + w[0], w[1]]), q: q});
   }
 
+  // 2. الجمل
   if (P.length > 0) {
     let q = [];
     P.forEach(p => {
@@ -84,7 +88,6 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn) {
       
       let t = p[0].split(' ');
       if (t.length > 1 && t.length < 8) {
-        // إصلاح: استخدام allWordsEn بدلاً من allWordsAr للخيارات الخاطئة في الجمل الإنجليزية
         q.push(['bw', p[1], p[0], pk(allWordsEn, 2, t.map(x => x.toLowerCase().replace(/[.,!?]/g, '')))]);
       }
       
@@ -114,6 +117,9 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn) {
 // ==========================================
 async function loadCurriculumFromDB(grade, subject) {
   try {
+    // إفراغ المصفوفة قبل التحميل الجديد
+    U = [];
+    
     const { data: units, error: uErr } = await sb.from('units').select('*').eq('grade', grade).eq('subject', subject).order('order_num');
     if (uErr) throw uErr;
     if (!units || units.length === 0) return false;
@@ -165,6 +171,7 @@ async function loadCurriculumFromDB(grade, subject) {
         }
       });
 
+      // إضافة تدريب النطق لكل وحدة
       const allCards = uiLessons.flatMap(l => l.c);
       const uniqueCards = [];
       const seen = new Set();
@@ -177,6 +184,7 @@ async function loadCurriculumFromDB(grade, subject) {
       }
       uiLessons.push({ n: 'تدريب النطق', c: [], q: sq });
 
+      // إضافة اختبار الوحدة
       const pool = uiLessons.flatMap(l => l.q);
       uiLessons.push({ n: 'اختبار الوحدة', c: [], test: 1, pool: pool, q: [] });
 
@@ -251,7 +259,7 @@ async function checkSession() {
 checkSession();
 
 // ==========================================
-// 6. إدارة الطلاب
+// 6. إدارة الطلاب والمواد
 // ==========================================
 window.loadSubjectsForGrade = function(grade) {
   const container = document.getElementById('subjects-container');
@@ -333,6 +341,7 @@ document.getElementById('save-student-btn').onclick = async () => {
   } finally { btn.textContent = 'حفظ الحساب'; btn.disabled = false; }
 };
 
+// اختيار الطالب -> الانتقال لشاشة المواد
 window.selectStudent = async function(id) {
   try {
     const { data: student } = await sb.from('students').select('*').eq('id', id).single();
@@ -380,7 +389,7 @@ window.selectStudent = async function(id) {
   } catch (err) { toast('حدث خطأ في تحميل بيانات الطالب', 'error'); }
 };
 
-// دالة فتح مادة معينة وعرض دروسها
+// فتح مادة معينة -> جلب الدروس والانتقال لشاشة التطبيق
 window.openSubject = async function(subjectName) {
     document.getElementById('app-student-name').textContent = currentStudent.full_name.split(' ')[0] + ' • ' + subjectName;
     showScreen('app-screen');
@@ -416,48 +425,17 @@ window.openSubject = async function(subjectName) {
     home();
 };
 
-// زر الرجوع من الدروس ← يعود لشاشة المواد
+// أزرار الرجوع
 document.getElementById('back-to-profiles').onclick = () => { 
     showScreen('subjects-screen'); 
 };
 
-// زر الرجوع من المواد ← يعود لشاشة الحسابات
 document.getElementById('back-to-profiles-from-subjects').onclick = () => { 
     showScreen('profiles-screen'); 
     loadStudents(); 
 };
-    S = { xp: progress.xp || 0, streak: progress.streak || 0, last: progress.last_active || "", done: progress.completed_lessons || [] };
-    document.getElementById('app-student-name').textContent = currentStudent.full_name.split(' ')[0];
-    
-    showScreen('app-screen');
-    document.getElementById('path').innerHTML = '<div style="text-align:center;margin-top:50px;color:var(--mut);">⏳ جاري تحميل المنهاج...</div>';
-    
-    const isEnglishSelected = currentStudent.selected_subjects.includes("اللغة الإنجليزية");
-    const isSupportedGrade = (currentStudent.grade === "الأول" || currentStudent.grade === "الرابع" || currentStudent.grade === "السابع");
 
-    if (isEnglishSelected && isSupportedGrade) {
-      const loaded = await loadCurriculumFromDB(currentStudent.grade, "اللغة الإنجليزية");
-      if (!loaded) {
-        document.getElementById('path').innerHTML = `
-          <div style="text-align:center; padding:50px 20px; color:var(--mut);">
-            <p style="font-size:50px; margin:0;">🚧</p>
-            <h2 style="margin:10px 0;">المنهاج قيد الإعداد</h2>
-            <p>لم نتمكن من العثور على دروس لصف <b>${currentStudent.grade}</b> في قاعدة البيانات.</p>
-          </div>
-        `;
-        return;
-      }
-    } else {
-       document.getElementById('path').innerHTML = '<div style="text-align:center;margin-top:50px;">المنهاج قيد الإعداد لهذا الصف أو المادة.</div>';
-       return;
-    }
-
-    home(); 
-  } catch (err) { toast('حدث خطأ في تحميل بيانات الطالب', 'error'); }
-};
-
-document.getElementById('back-to-profiles').onclick = () => { showScreen('profiles-screen'); loadStudents(); };
-
+// حفظ التقدم
 async function save() {
   if (!currentStudent) return;
   await sb.from('progress').update({

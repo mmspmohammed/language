@@ -84,7 +84,8 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn) {
       
       let t = p[0].split(' ');
       if (t.length > 1 && t.length < 8) {
-        q.push(['bw', p[1], p[0], pk(allWordsAr, 2, t.map(x => x.toLowerCase().replace(/[.,!?]/g, '')))]);
+        // إصلاح: استخدام allWordsEn بدلاً من allWordsAr للخيارات الخاطئة في الجمل الإنجليزية
+        q.push(['bw', p[1], p[0], pk(allWordsEn, 2, t.map(x => x.toLowerCase().replace(/[.,!?]/g, '')))]);
       }
       
       let validWords = t.map((w, idx) => ({w: w.replace(/[.,!?]/g, ''), idx})).filter(x => x.w.length > 2 && !['the','and','you','are','this','that','for','with','what','your','how'].includes(x.w.toLowerCase()));
@@ -131,7 +132,6 @@ async function loadCurriculumFromDB(grade, subject) {
       const unitLessons = lessons.filter(l => l.unit_id === unit.id);
       let uiLessons = [];
 
-      // دالة مساعدة لإنشاء كائن الدرس
       const createLessonObj = (title, w, p) => {
         const gen = generateExercises({ w, p }, allVocabAr, allSentAr, allVocabEn);
         return { n: title, c: gen.cards, q: gen.questions };
@@ -141,7 +141,7 @@ async function loadCurriculumFromDB(grade, subject) {
         const w = vocab.filter(v => v.lesson_id === lesson.id).map(v => [v.word_en, v.word_ar, v.emoji]);
         const p = sentences.filter(s => s.lesson_id === lesson.id).map(s => [s.sentence_en, s.sentence_ar]);
 
-        // إذا كان هناك مفردات، نقسمها إلى قسمين
+        // تقسيم المفردات إلى قسمين
         if (w.length > 0) {
             let half = Math.ceil(w.length / 2);
             let w1 = w.slice(0, half);
@@ -152,7 +152,7 @@ async function loadCurriculumFromDB(grade, subject) {
             
             if (p.length > 0) uiLessons.push(createLessonObj('الجمل', [], p));
         } 
-        // إذا لم يكن هناك مفردات (مثل وحدات المراجعة)، نقسم الجمل إلى 3 أقسام
+        // تقسيم الجمل إلى ثلاثة أقسام (لوحدات المراجعة)
         else if (p.length > 0) {
             let third = Math.ceil(p.length / 3);
             let p1 = p.slice(0, third);
@@ -165,7 +165,6 @@ async function loadCurriculumFromDB(grade, subject) {
         }
       });
 
-      // إضافة تدريب النطق لكل وحدة
       const allCards = uiLessons.flatMap(l => l.c);
       const uniqueCards = [];
       const seen = new Set();
@@ -178,7 +177,6 @@ async function loadCurriculumFromDB(grade, subject) {
       }
       uiLessons.push({ n: 'تدريب النطق', c: [], q: sq });
 
-      // إضافة اختبار الوحدة
       const pool = uiLessons.flatMap(l => l.q);
       uiLessons.push({ n: 'اختبار الوحدة', c: [], test: 1, pool: pool, q: [] });
 
@@ -353,7 +351,7 @@ window.selectStudent = async function(id) {
     document.getElementById('path').innerHTML = '<div style="text-align:center;margin-top:50px;color:var(--mut);">⏳ جاري تحميل المنهاج...</div>';
     
     const isEnglishSelected = currentStudent.selected_subjects.includes("اللغة الإنجليزية");
-    const isSupportedGrade = (currentStudent.grade === "الأول" || currentStudent.grade === "السابع"|| currentStudent.grade === "الرابع");
+    const isSupportedGrade = (currentStudent.grade === "الأول" || currentStudent.grade === "الرابع" || currentStudent.grade === "السابع");
 
     if (isEnglishSelected && isSupportedGrade) {
       const loaded = await loadCurriculumFromDB(currentStudent.grade, "اللغة الإنجليزية");
@@ -434,6 +432,9 @@ function q(){
  } else {
    cur.opts = mc ? shuf([x[2]].concat(x[3])) : null;
  }
+ 
+ // سطر مهم جداً كان مفقوداً وتم إصلاحه (تجهيز الكلمات لترتيب الجملة)
+ cur.bank = mc ? null : shuf(x[2].split(" ").concat(x[3]));
  
  var en = mc && /[A-Za-z]/.test(x[1]);
  var b = '';

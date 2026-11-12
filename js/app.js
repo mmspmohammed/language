@@ -353,7 +353,7 @@ window.selectStudent = async function(id) {
     document.getElementById('path').innerHTML = '<div style="text-align:center;margin-top:50px;color:var(--mut);">⏳ جاري تحميل المنهاج...</div>';
     
     const isEnglishSelected = currentStudent.selected_subjects.includes("اللغة الإنجليزية");
-    const isSupportedGrade = (currentStudent.grade === "الأول" || currentStudent.grade === "السابع");
+    const isSupportedGrade = (currentStudent.grade === "الأول" || currentStudent.grade === "السابع"|| currentStudent.grade === "الرابع");
 
     if (isEnglishSelected && isSupportedGrade) {
       const loaded = await loadCurriculumFromDB(currentStudent.grade, "اللغة الإنجليزية");

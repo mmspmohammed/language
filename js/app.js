@@ -13,8 +13,17 @@ let U = [];
 
 const SUBJECTS_BY_GRADE = {
   "الأول": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
+  "الثاني": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
+  "الثالث": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
+  "الرابع": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية", "العلوم"],
+  "الخامس": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية", "العلوم"],
+  "السادس": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية", "العلوم"],
   "السابع": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية", "العلوم", "الاجتماعيات"],
-  // ... باقي الصفوف ...
+  "الثامن": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية", "العلوم", "الاجتماعيات"],
+  "التاسع": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية", "العلوم", "الاجتماعيات"],
+  "العاشر": ["اللغة الإنجليزية", "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء"],
+  "الحادي عشر": ["اللغة الإنجليزية", "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء"],
+  "البكالوريا": ["اللغة الإنجليزية", "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء"]
 };
 
 // ==========================================
@@ -39,7 +48,7 @@ function toast(msg, type = 'info') {
 const withTimeout = (promise, ms) => {
   return Promise.race([
     promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('انتهت مهلة الاتصال.')), ms))
+    new Promise((_, reject) => setTimeout(() => reject(new Error('انتهت مهلة الاتصال. يرجى التحقق من الإنترنت.')), ms))
   ]);
 };
 
@@ -49,25 +58,56 @@ function pk2(a,b,n,ex){var r=pk(a,n,ex);return r.length<n?r.concat(pk(b,n-r.leng
 function say(t){try{speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t.replace(/[^\x00-\x7F’]/g,""));u.lang="en-US";speechSynthesis.speak(u)}catch(e){}}
 
 // ==========================================
-// 3. محرك توليد التمارين
+// 3. محرك توليد التمارين (تمت إضافة أنواع جديدة)
 // ==========================================
-function generateExercises(lessonData, allWords, allSentences) {
+function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn) {
   const L = [], W = lessonData.w || [], P = lessonData.p || [];
   const wa = W.map(w => w[1]), pa = P.map(p => p[1]);
   
+  // 1. المفردات (اختيار من متعدد + استماع + صح وخطأ)
   if (W.length > 0) {
     let q = [];
-    W.forEach(w => q.push(['mc', w[0], w[1], pk2(wa, allWords, 2, [w[1]])]));
-    W.forEach(w => q.push(['ls', w[0], w[0], pk(W.map(z=>z[0]), 2, [w[0]])]));
+    W.forEach(w => {
+      // اختيار من متعدد
+      q.push(['mc', w[0], w[1], pk2(wa, allWordsAr, 2, [w[1]])]);
+      // استماع
+      q.push(['ls', w[0], w[0], pk(W.map(z=>z[0]), 2, [w[0]])]);
+      
+      // صح أم خطأ
+      let isTrue = Math.random() > 0.5;
+      let randomAr = isTrue ? w[1] : (pk2(wa, allWordsAr, 1, [w[1]])[0] || 'غير معروف');
+      q.push(['tf', w[0], randomAr, isTrue ? 'true' : 'false']);
+    });
     L.push({n: 'المفردات', c: W.map(w => [(w[2] || '') + ' ' + w[0], w[1]]), q: q});
   }
 
+  // 2. الجمل (اختيار من متعدد + ترتيب كلمات + أكمل الفراغ)
   if (P.length > 0) {
     let q = [];
-    P.forEach(p => q.push(['mc', p[0], p[1], pk2(pa, allSentences, 2, [p[1]])]));
     P.forEach(p => {
+      // اختيار من متعدد
+      q.push(['mc', p[0], p[1], pk2(pa, allSentencesAr, 2, [p[1]])]);
+      
+      // ترتيب كلمات
       let t = p[0].split(' ');
-      if (t.length > 1 && t.length < 7) q.push(['bw', p[1], p[0], pk(allWords, 2, t.map(x => x.toLowerCase().replace(/[.,!?]/g, '')))]);
+      if (t.length > 1 && t.length < 8) {
+        q.push(['bw', p[1], p[0], pk(allWordsAr, 2, t.map(x => x.toLowerCase().replace(/[.,!?]/g, '')))]);
+      }
+      
+      // أكمل الفراغ
+      let validWords = t.map((w, idx) => ({w: w.replace(/[.,!?]/g, ''), idx})).filter(x => x.w.length > 2 && !['the','and','you','are','this','that','for','with','what','your','how'].includes(x.w.toLowerCase()));
+      if (validWords.length > 0) {
+         let target = validWords[Math.floor(Math.random() * validWords.length)];
+         let blankWords = [...t];
+         blankWords[target.idx] = '___';
+         let blankSentence = blankWords.join(' ');
+         
+         let wrongOptions = pk(allWordsEn, 3, [target.w]);
+         if (wrongOptions.length < 3) {
+             wrongOptions = wrongOptions.concat(pk(['book', 'pen', 'car', 'dog', 'cat', 'tree', 'house', 'school', 'water', 'food'], 3 - wrongOptions.length, [target.w]));
+         }
+         q.push(['fb', blankSentence, target.w, wrongOptions]);
+      }
     });
     L.push({n: 'الجمل', c: P, q: q});
   }
@@ -77,7 +117,7 @@ function generateExercises(lessonData, allWords, allSentences) {
 }
 
 // ==========================================
-// 4. جلب المنهاج من قاعدة البيانات
+// 4. جلب المنهاج من قاعدة البيانات (Supabase)
 // ==========================================
 async function loadCurriculumFromDB(grade, subject) {
   try {
@@ -89,7 +129,7 @@ async function loadCurriculumFromDB(grade, subject) {
     console.log(`📦 عدد الوحدات التي تم العثور عليها: ${units ? units.length : 0}`);
     
     if (!units || units.length === 0) {
-      console.warn("⚠️ لم يتم العثور على وحدات تطابق هذا الصف والمادة في قاعدة البيانات. تأكد من إدخال البيانات بشكل صحيح.");
+      console.warn("⚠️ لم يتم العثور على وحدات تطابق هذا الصف والمادة في قاعدة البيانات.");
       return false;
     }
 
@@ -99,7 +139,9 @@ async function loadCurriculumFromDB(grade, subject) {
     const { data: vocab } = await sb.from('vocabulary').select('*').in('lesson_id', lessonIds).order('order_num');
     const { data: sentences } = await sb.from('sentences').select('*').in('lesson_id', lessonIds).order('order_num');
 
+    // قوائم مساعدة
     const allVocabAr = vocab.map(v => v.word_ar);
+    const allVocabEn = vocab.map(v => v.word_en); // نحتاجها لتمارين أكمل الفراغ
     const allSentAr = sentences.map(s => s.sentence_ar);
 
     U = units.map(unit => {
@@ -109,11 +151,17 @@ async function loadCurriculumFromDB(grade, subject) {
         const w = vocab.filter(v => v.lesson_id === lesson.id).map(v => [v.word_en, v.word_ar, v.emoji]);
         const p = sentences.filter(s => s.lesson_id === lesson.id).map(s => [s.sentence_en, s.sentence_ar]);
         
-        const generated = generateExercises({ w, p }, allVocabAr, allSentAr);
-        return { n: lesson.title, c: generated.cards, q: generated.questions };
+        // توليد التمارين باستخدام القوائم المساعدة
+        const generated = generateExercises({ w, p }, allVocabAr, allSentAr, allVocabEn);
+        
+        return {
+          n: lesson.title,
+          c: generated.cards,
+          q: generated.questions
+        };
       });
 
-      // إضافة تدريب النطق
+      // إضافة تدريب النطق لكل وحدة
       const allCards = uiLessons.flatMap(l => l.c);
       const uniqueCards = [];
       const seen = new Set();
@@ -141,7 +189,7 @@ async function loadCurriculumFromDB(grade, subject) {
 }
 
 // ==========================================
-// 5. المصادقة (Auth)
+// 5. نظام المصادقة (Auth)
 // ==========================================
 let isLoginMode = true;
 
@@ -311,7 +359,6 @@ window.selectStudent = async function(id) {
             <p style="font-size:50px; margin:0;">🚧</p>
             <h2 style="margin:10px 0;">المنهاج قيد الإعداد</h2>
             <p>لم نتمكن من العثور على دروس لصف <b>${currentStudent.grade}</b> في قاعدة البيانات.</p>
-            <p style="font-size:12px;">(تأكد من إدخال بيانات هذا الصف في سوبابيز)</p>
           </div>
         `;
         return;
@@ -373,15 +420,49 @@ function start(u,l){
 }
 
 function q(){
- if(cur.qs[cur.i][0]=='sp')return sp();
- var x=cur.qs[cur.i],mc=x[0]!="bw",ty=x[0];cur.sel=null;cur.ans=[];cur.done=false;
- cur.opts=mc?shuf([x[2]].concat(x[3])):null;cur.bank=mc?null:shuf(x[2].split(" ").concat(x[3]));
- var en=mc&&/[A-Za-z]/.test(x[1]);
- var b=mc?'<h3>'+({mc:"اختر المعنى الصحيح",ls:"استمع واختر",rp:"اختر الرد"})[ty]+'</h3>'+(ty=="ls"?'<p class="pr"><button class="sp lg" id="sp">🔊</button></p>':'<p class="pr"><span dir="auto">'+x[1]+'</span>'+(en?'<button class="sp" id="sp">🔊</button>':'')+'</p>')+cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'">'+o+'</button>'}).join("")
-  :'<h3>رتّب الكلمات</h3><p class="pr">'+x[1]+'</p><div class="line" id="ln"></div><div class="bank" id="bk"></div>';
+ if(cur.qs[cur.i][0]=='sp') return sp();
+ var x=cur.qs[cur.i],ty=x[0];cur.sel=null;cur.ans=[];cur.done=false;
+ 
+ // تحديد ما إذا كان السؤال يعتمد على الخيارات المتعددة
+ let mc = (ty === 'mc' || ty === 'ls' || ty === 'fb' || ty === 'tf');
+ 
+ if (ty === 'tf') {
+   cur.opts = ['true', 'false'];
+ } else {
+   cur.opts = mc ? shuf([x[2]].concat(x[3])) : null;
+ }
+ 
+ var en = mc && /[A-Za-z]/.test(x[1]);
+ var b = '';
+
+ // واجهة صح وخطأ
+ if (ty === 'tf') {
+   b = `<h3>هل الترجمة صحيحة؟</h3>
+        <div style="text-align:center; margin: 20px 0; background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--line);">
+           <p style="font-size: 32px; font-weight: bold; color: var(--pri); font-family: monospace;" dir="ltr">${x[1]}</p>
+           <p style="font-size: 24px; color: var(--mut); margin: 10px 0;">⬇️</p>
+           <p style="font-size: 26px; font-weight: bold;">${x[2]}</p>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:20px;">
+           <button class="opt" style="text-align:center; justify-content:center; border-color: var(--good); color: var(--good); font-weight:700;" data-i="0">✅ صح</button>
+           <button class="opt" style="text-align:center; justify-content:center; border-color: var(--bad); color: var(--bad); font-weight:700;" data-i="1">❌ خطأ</button>
+        </div>`;
+ } 
+ // واجهة أكمل الفراغ
+ else if (ty === 'fb') {
+   b = `<h3>أكمل الفراغ بالكلمة الصحيحة:</h3>
+        <p class="pr" style="text-align:center; font-size: 24px; margin-bottom: 30px; line-height: 1.8;" dir="ltr">${x[1]}</p>
+        ` + cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'">'+o+'</button>'}).join("");
+ } 
+ // الواجهات القديمة
+ else {
+   b = mc ? '<h3>'+({mc:"اختر المعنى الصحيح",ls:"استمع واختر",rp:"اختر الرد"})[ty]+'</h3>'+(ty=="ls"?'<p class="pr"><button class="sp lg" id="sp">🔊</button></p>':'<p class="pr"><span dir="auto">'+x[1]+'</span>'+(en?'<button class="sp" id="sp">🔊</button>':'')+'</p>')+cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'">'+o+'</button>'}).join("")
+    : '<h3>رتّب الكلمات</h3><p class="pr">'+x[1]+'</p><div class="line" id="ln"></div><div class="bank" id="bk"></div>';
+ }
+
  $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"><i style="width:'+(cur.i/cur.qs.length*100)+'%"></i></div><span class="chip">'+(cur.t?'📝 اختبار':'❤️ '+cur.h)+'</span></div><div class="lb">'+b+'</div><div class="lf" id="ft"><div><button class="btn" id="ck" disabled>تحقق</button></div></div>';
  $("#cl").onclick=close;$("#ck").onclick=check;
- if(en){say(x[1]);$("#sp").onclick=function(){say(x[1])}}
+ if(en && ty !== 'fb' && ty !== 'tf'){say(x[1]);$("#sp").onclick=function(){say(x[1])}}
  if(mc)$(".lb").onclick=function(e){var o=e.target.closest(".opt");if(!o||cur.done)return;
   [].forEach.call(document.querySelectorAll(".opt"),function(z){z.classList.remove("sel")});o.classList.add("sel");cur.sel=+o.dataset.i;$("#ck").disabled=false};
  else bw();
@@ -396,8 +477,18 @@ function bw(){
 }
 
 function check(){
- var x=cur.qs[cur.i],mc=x[0]!="bw",ok;cur.done=true;
- ok=mc?cur.opts[cur.sel]==x[2]:cur.ans.map(function(i){return cur.bank[i]}).join(" ")==x[2];
+ var x=cur.qs[cur.i],ty=x[0],ok;cur.done=true;
+ 
+ if (ty === 'tf') {
+   ok = (cur.opts[cur.sel] === x[3]);
+ } else if (ty === 'fb') {
+   ok = (cur.opts[cur.sel] === x[2]);
+ } else if (ty === 'bw') {
+   ok = (cur.ans.map(function(i){return cur.bank[i]}).join(" ") === x[2]);
+ } else {
+   ok = (cur.opts[cur.sel] === x[2]);
+ }
+
  if(ok)cur.ok++;else cur.h--;
  var f=$("#ft");f.className="lf "+(ok?"ok":"no");
  f.innerHTML='<div><p>'+(ok?"أحسنت!":"الإجابة الصحيحة:")+'</p>'+(ok?'':'<p class="en" dir="auto">'+x[2]+'</p>')+'<button class="btn" id="nx">متابعة</button></div>';

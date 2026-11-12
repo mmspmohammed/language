@@ -13,21 +13,12 @@ let U = [];
 
 const SUBJECTS_BY_GRADE = {
   "الأول": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
-  "الثاني": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
-  "الثالث": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
   "الرابع": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية", "العلوم", "الدراسات الاجتماعية"],
-  "الخامس": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية", "العلوم"],
-  "السادس": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية", "العلوم"],
   "السابع": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية", "العلوم", "الاجتماعيات"],
-  "الثامن": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية", "العلوم", "الاجتماعيات"],
-  "التاسع": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية", "العلوم", "الاجتماعيات"],
-  "العاشر": ["اللغة الإنجليزية", "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء"],
-  "الحادي عشر": ["اللغة الإنجليزية", "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء"],
-  "البكالوريا": ["اللغة الإنجليزية", "الرياضيات", "الفيزياء", "الكيمياء", "الأحياء"]
 };
 
 // ==========================================
-// 2. دوال مساعدة (Helpers)
+// 2. دوال مساعدة
 // ==========================================
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -59,7 +50,7 @@ function pk2(a,b,n,ex){var r=pk(a,n,ex);return r.length<n?r.concat(pk(b,n-r.leng
 function say(t){try{speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t.replace(/[^\x00-\x7F’]/g,""));u.lang="en-US";speechSynthesis.speak(u)}catch(e){}}
 
 // ==========================================
-// 3. محرك توليد التمارين (يدعم اللغات والمواد الاجتماعية)
+// 3. محرك توليد التمارين (مخصص للمواد الاجتماعية)
 // ==========================================
 function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, subject) {
   const L = [], W = lessonData.w || [], P = lessonData.p || [];
@@ -70,13 +61,14 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
   if (W.length > 0) {
     let q = [];
     W.forEach(w => {
+      // تمرين اختر التعريف
       q.push(['mc', w[0], w[1], pk2(wa, allWordsAr, 2, [w[1]])]);
       
+      // تمرين صح وخطأ
       let isTrue = Math.random() > 0.5;
       let randomAr = isTrue ? w[1] : (pk2(wa, allWordsAr, 1, [w[1]])[0] || 'غير معروف');
       q.push(['tf', w[0], randomAr, isTrue ? 'true' : 'false']);
       
-      // إضافة تمرين الاستماع فقط للغة الإنجليزية
       if (!isArabic) {
           q.push(['ls', w[0], w[0], pk(W.map(z=>z[0]), 2, [w[0]])]);
       }
@@ -84,34 +76,45 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
     L.push({n: 'المصطلحات والمفاهيم', c: W.map(w => [(w[2] || '') + ' ' + w[0], w[1]]), q: q});
   }
 
-  // 2. المعلومات والأسئلة والأجوبة
+  // 2. المعلومات والأسئلة
   if (P.length > 0) {
     let q = [];
     P.forEach(p => {
+      // تمرين اختيار الجواب الصحيح
       q.push(['mc', p[0], p[1], pk2(pa, allSentencesAr, 2, [p[1]])]);
       
-      let t = p[0].split(' ');
-      if (t.length > 2 && t.length < 7) {
-        q.push(['bw', p[1], p[0], pk(allWordsEn, 2, t.map(x => x.toLowerCase().replace(/[.,!?]/g, '')))]);
-      }
+      // تمرين صح وخطأ
+      let isTrue = Math.random() > 0.5;
+      let randomAr = isTrue ? p[1] : (pk2(pa, allSentencesAr, 1, [p[1]])[0] || 'غير معروف');
+      q.push(['tf', p[0], randomAr, isTrue ? 'true' : 'false']);
       
-      let validWords = t.map((w, idx) => ({w: w.replace(/[.,!?]/g, ''), idx})).filter(x => x.w.length > 2 && !['the','and','you','are','this','that','for','with','what','your','how','في','من','على','عن','إلى','التي','الذي','هذا','هذه','ما','هي','هو'].includes(x.w));
-      if (validWords.length > 0) {
-         let target = validWords[Math.floor(Math.random() * validWords.length)];
-         let blankWords = [...t];
-         blankWords[target.idx] = '___';
-         let blankSentence = blankWords.join(' ');
-         
-         let wrongOptions = pk(allWordsEn, 3, [target.w]);
-         if (wrongOptions.length < 3) {
-             wrongOptions = wrongOptions.concat(pk(['كتاب', 'قلم', 'سيارة', 'بيت', 'مدرسة', 'ماء', 'طعام', 'شجرة'], 3 - wrongOptions.length, [target.w]));
-         }
-         q.push(['fb', blankSentence, target.w, wrongOptions]);
+      // تمرين أكمل الفراغ (خاص باللغة العربية والمواد الاجتماعية)
+      if (isArabic) {
+          q.push(['fb', p[0] + ' .....', p[1], pk2(pa, allSentencesAr, 3, [p[1]])]);
+      } else {
+          // للغة الإنجليزية نستخدم الطريقة القديمة (ترتيب كلمات وأكمل فراغ)
+          let t = p[0].split(' ');
+          if (t.length > 2 && t.length < 8) {
+            q.push(['bw', p[1], p[0], pk(allWordsEn, 2, t.map(x => x.toLowerCase().replace(/[.,!?]/g, '')))]);
+          }
+          let validWords = t.map((w, idx) => ({w: w.replace(/[.,!?]/g, ''), idx})).filter(x => x.w.length > 2 && !['the','and','you','are','this','that','for','with','what','your','how'].includes(x.w));
+          if (validWords.length > 0) {
+             let target = validWords[Math.floor(Math.random() * validWords.length)];
+             let blankWords = [...t];
+             blankWords[target.idx] = '___';
+             let blankSentence = blankWords.join(' ');
+             let wrongOptions = pk(allWordsEn, 3, [target.w]);
+             if (wrongOptions.length < 3) {
+                 wrongOptions = wrongOptions.concat(pk(['book', 'pen', 'car', 'dog', 'cat', 'tree', 'house', 'school', 'water', 'food'], 3 - wrongOptions.length, [target.w]));
+             }
+             q.push(['fb', blankSentence, target.w, wrongOptions]);
+          }
       }
     });
     L.push({n: 'الأسئلة والمعلومات', c: P, q: q});
   }
 
+  // تجميع كل الأسئلة للاختبار
   const allQs = [].concat(...L.map(l => l.q));
   return { cards: L.flatMap(l => l.c), questions: allQs };
 }
@@ -121,8 +124,7 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
 // ==========================================
 async function loadCurriculumFromDB(grade, subject) {
   try {
-    U = []; // تفريغ المصفوفة قبل التحميل
-    
+    U = []; 
     const { data: units, error: uErr } = await sb.from('units').select('*').eq('grade', grade).eq('subject', subject).order('order_num');
     if (uErr) throw uErr;
     if (!units || units.length === 0) return false;
@@ -152,26 +154,22 @@ async function loadCurriculumFromDB(grade, subject) {
         const w = vocab.filter(v => v.lesson_id === lesson.id).map(v => [v.word_en, v.word_ar, v.emoji]);
         const p = sentences.filter(s => s.lesson_id === lesson.id).map(s => [s.sentence_en, s.sentence_ar]);
 
+        // تقسيم المحتوى لعدة دوائر (Nodes)
         if (w.length > 0) {
-            let half = Math.ceil(w.length / 2);
-            let w1 = w.slice(0, half);
-            let w2 = w.slice(half);
-            if (w1.length > 0) uiLessons.push(createLessonObj('المفردات (1)', w1, []));
-            if (w2.length > 0) uiLessons.push(createLessonObj('المفردات (2)', w2, []));
-            if (p.length > 0) uiLessons.push(createLessonObj('الجمل والمعلومات', [], p));
+            uiLessons.push(createLessonObj('المفاهيم والمصطلحات', w, []));
+            if (p.length > 0) uiLessons.push(createLessonObj('أسئلة وأجوبة', [], p));
         } 
         else if (p.length > 0) {
             let third = Math.ceil(p.length / 3);
             let p1 = p.slice(0, third);
             let p2 = p.slice(third, third*2);
             let p3 = p.slice(third*2);
-            if (p1.length > 0) uiLessons.push(createLessonObj('القراءة (1)', [], p1));
-            if (p2.length > 0) uiLessons.push(createLessonObj('القراءة (2)', [], p2));
-            if (p3.length > 0) uiLessons.push(createLessonObj('القراءة (3)', [], p3));
+            if (p1.length > 0) uiLessons.push(createLessonObj('معلومات (1)', [], p1));
+            if (p2.length > 0) uiLessons.push(createLessonObj('معلومات (2)', [], p2));
+            if (p3.length > 0) uiLessons.push(createLessonObj('معلومات (3)', [], p3));
         }
       });
 
-      // إضافة تدريب النطق فقط للمواد الإنجليزية
       if (!isArabic) {
           const allCards = uiLessons.flatMap(l => l.c);
           const uniqueCards = [];
@@ -187,7 +185,7 @@ async function loadCurriculumFromDB(grade, subject) {
       }
 
       const pool = uiLessons.flatMap(l => l.q);
-      uiLessons.push({ n: 'اختبار الوحدة', c: [], test: 1, pool: pool, q: [] });
+      uiLessons.push({ n: 'اختبار الدرس', c: [], test: 1, pool: pool, q: [] });
 
       return { t: unit.title, en: unit.title_en, l: uiLessons };
     });
@@ -200,10 +198,9 @@ async function loadCurriculumFromDB(grade, subject) {
 }
 
 // ==========================================
-// 5. نظام المصادقة (Auth)
+// 5. المصادقة وإدارة الطلاب (مختصر)
 // ==========================================
 let isLoginMode = true;
-
 document.getElementById('auth-toggle').onclick = () => {
   isLoginMode = !isLoginMode;
   document.getElementById('auth-title').textContent = isLoginMode ? 'تسجيل الدخول' : 'إنشاء حساب جديد';
@@ -259,9 +256,6 @@ async function checkSession() {
 }
 checkSession();
 
-// ==========================================
-// 6. إدارة الطلاب والمواد
-// ==========================================
 window.loadSubjectsForGrade = function(grade) {
   const container = document.getElementById('subjects-container');
   const checkboxes = document.getElementById('subjects-checkboxes');
@@ -342,7 +336,6 @@ document.getElementById('save-student-btn').onclick = async () => {
   } finally { btn.textContent = 'حفظ الحساب'; btn.disabled = false; }
 };
 
-// اختيار الطالب -> شاشة المواد
 window.selectStudent = async function(id) {
   try {
     const { data: student } = await sb.from('students').select('*').eq('id', id).single();
@@ -390,7 +383,6 @@ window.selectStudent = async function(id) {
   } catch (err) { toast('حدث خطأ في تحميل بيانات الطالب', 'error'); }
 };
 
-// فتح مادة -> جلب الدروس
 window.openSubject = async function(subjectName) {
     document.getElementById('app-student-name').textContent = currentStudent.full_name.split(' ')[0] + ' • ' + subjectName;
     showScreen('app-screen');
@@ -400,7 +392,6 @@ window.openSubject = async function(subjectName) {
     const isSocial = (subjectName === "الدراسات الاجتماعية" || subjectName === "الاجتماعيات");
     const isSupportedGrade = (currentStudent.grade === "الأول" || currentStudent.grade === "الرابع" || currentStudent.grade === "السابع");
 
-    // دعم اللغة الإنجليزية للصفوف المتاحة، ودعم الدراسات الاجتماعية للصف الرابع
     const isSupported = (isEnglish && isSupportedGrade) || (isSocial && currentStudent.grade === "الرابع");
 
     if (isSupported) {
@@ -429,17 +420,9 @@ window.openSubject = async function(subjectName) {
     home();
 };
 
-// أزرار الرجوع
-document.getElementById('back-to-profiles').onclick = () => { 
-    showScreen('subjects-screen'); 
-};
+document.getElementById('back-to-profiles').onclick = () => { showScreen('subjects-screen'); };
+document.getElementById('back-to-profiles-from-subjects').onclick = () => { showScreen('profiles-screen'); loadStudents(); };
 
-document.getElementById('back-to-profiles-from-subjects').onclick = () => { 
-    showScreen('profiles-screen'); 
-    loadStudents(); 
-};
-
-// حفظ التقدم
 async function save() {
   if (!currentStudent) return;
   await sb.from('progress').update({
@@ -447,9 +430,6 @@ async function save() {
   }).eq('student_id', currentStudent.id);
 }
 
-// ==========================================
-// 7. محرك عرض الدروس والتمارين
-// ==========================================
 var cur=null,$=function(s){return document.querySelector(s)};
 
 function home(){
@@ -496,9 +476,7 @@ function q(){
    cur.opts = mc ? shuf([x[2]].concat(x[3])) : null;
  }
  
- // تجهيز الكلمات لترتيب الجملة
  cur.bank = mc ? null : shuf(x[2].split(" ").concat(x[3]));
- 
  var b = '';
 
  if (ty === 'tf') {

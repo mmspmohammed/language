@@ -74,11 +74,26 @@
   </div>
 </div>
 
-<!-- شاشة التطبيق الرئيسية -->
+<!-- شاشة المواد (الجديدة) -->
+<div id="subjects-screen" class="screen">
+  <div class="top">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button id="back-to-profiles-from-subjects" class="switch-btn" title="تغيير الطالب">⇄</button>
+      <b id="subjects-student-name">المواد</b>
+    </div>
+  </div>
+  <div class="auth-container">
+    <h3 style="margin-bottom:5px;">اختر المادة التي تريد دراستها 📚</h3>
+    <p style="font-size:14px;color:var(--mut);margin-top:0;">مرحباً <span id="subjects-student-greeting"></span> 👋</p>
+  </div>
+  <div id="subjects-grid" class="profile-grid"></div>
+</div>
+
+<!-- شاشة التطبيق الرئيسية (الدروس) -->
 <div id="app-screen" class="screen">
   <div class="top">
     <div style="display:flex;align-items:center;gap:10px;">
-      <button id="back-to-profiles" class="switch-btn" title="تغيير الطالب">⇄</button>
+      <button id="back-to-profiles" class="switch-btn" title="تغيير المادة">⇄</button>
       <b id="app-student-name">خطوة</b>
     </div>
     <div class="chips">
@@ -86,7 +101,6 @@
       <span class="chip" id="cx">⭐ 0</span>
     </div>
   </div>
-  
   <main id="path"></main>
 </div>
 

@@ -58,22 +58,18 @@ function pk2(a,b,n,ex){var r=pk(a,n,ex);return r.length<n?r.concat(pk(b,n-r.leng
 function say(t){try{speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t.replace(/[^\x00-\x7F’]/g,""));u.lang="en-US";speechSynthesis.speak(u)}catch(e){}}
 
 // ==========================================
-// 3. محرك توليد التمارين (تمت إضافة أنواع جديدة)
+// 3. محرك توليد التمارين
 // ==========================================
 function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn) {
   const L = [], W = lessonData.w || [], P = lessonData.p || [];
   const wa = W.map(w => w[1]), pa = P.map(p => p[1]);
   
-  // 1. المفردات (اختيار من متعدد + استماع + صح وخطأ)
   if (W.length > 0) {
     let q = [];
     W.forEach(w => {
-      // اختيار من متعدد
       q.push(['mc', w[0], w[1], pk2(wa, allWordsAr, 2, [w[1]])]);
-      // استماع
       q.push(['ls', w[0], w[0], pk(W.map(z=>z[0]), 2, [w[0]])]);
       
-      // صح أم خطأ
       let isTrue = Math.random() > 0.5;
       let randomAr = isTrue ? w[1] : (pk2(wa, allWordsAr, 1, [w[1]])[0] || 'غير معروف');
       q.push(['tf', w[0], randomAr, isTrue ? 'true' : 'false']);
@@ -81,20 +77,16 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn) {
     L.push({n: 'المفردات', c: W.map(w => [(w[2] || '') + ' ' + w[0], w[1]]), q: q});
   }
 
-  // 2. الجمل (اختيار من متعدد + ترتيب كلمات + أكمل الفراغ)
   if (P.length > 0) {
     let q = [];
     P.forEach(p => {
-      // اختيار من متعدد
       q.push(['mc', p[0], p[1], pk2(pa, allSentencesAr, 2, [p[1]])]);
       
-      // ترتيب كلمات
       let t = p[0].split(' ');
       if (t.length > 1 && t.length < 8) {
         q.push(['bw', p[1], p[0], pk(allWordsAr, 2, t.map(x => x.toLowerCase().replace(/[.,!?]/g, '')))]);
       }
       
-      // أكمل الفراغ
       let validWords = t.map((w, idx) => ({w: w.replace(/[.,!?]/g, ''), idx})).filter(x => x.w.length > 2 && !['the','and','you','are','this','that','for','with','what','your','how'].includes(x.w.toLowerCase()));
       if (validWords.length > 0) {
          let target = validWords[Math.floor(Math.random() * validWords.length)];
@@ -117,21 +109,13 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn) {
 }
 
 // ==========================================
-// 4. جلب المنهاج من قاعدة البيانات (Supabase)
+// 4. جلب المنهاج من قاعدة البيانات (مع تقسيم الدروس)
 // ==========================================
 async function loadCurriculumFromDB(grade, subject) {
   try {
-    console.log(`🔍 جاري البحث عن منهاج للصف: "${grade}" والمادة: "${subject}"`);
-
     const { data: units, error: uErr } = await sb.from('units').select('*').eq('grade', grade).eq('subject', subject).order('order_num');
     if (uErr) throw uErr;
-    
-    console.log(`📦 عدد الوحدات التي تم العثور عليها: ${units ? units.length : 0}`);
-    
-    if (!units || units.length === 0) {
-      console.warn("⚠️ لم يتم العثور على وحدات تطابق هذا الصف والمادة في قاعدة البيانات.");
-      return false;
-    }
+    if (!units || units.length === 0) return false;
 
     const unitIds = units.map(u => u.id);
     const { data: lessons } = await sb.from('lessons').select('*').in('unit_id', unitIds).order('order_num');
@@ -139,26 +123,46 @@ async function loadCurriculumFromDB(grade, subject) {
     const { data: vocab } = await sb.from('vocabulary').select('*').in('lesson_id', lessonIds).order('order_num');
     const { data: sentences } = await sb.from('sentences').select('*').in('lesson_id', lessonIds).order('order_num');
 
-    // قوائم مساعدة
     const allVocabAr = vocab.map(v => v.word_ar);
-    const allVocabEn = vocab.map(v => v.word_en); // نحتاجها لتمارين أكمل الفراغ
+    const allVocabEn = vocab.map(v => v.word_en);
     const allSentAr = sentences.map(s => s.sentence_ar);
 
     U = units.map(unit => {
       const unitLessons = lessons.filter(l => l.unit_id === unit.id);
-      
-      const uiLessons = unitLessons.map(lesson => {
+      let uiLessons = [];
+
+      // دالة مساعدة لإنشاء كائن الدرس
+      const createLessonObj = (title, w, p) => {
+        const gen = generateExercises({ w, p }, allVocabAr, allSentAr, allVocabEn);
+        return { n: title, c: gen.cards, q: gen.questions };
+      };
+
+      unitLessons.forEach(lesson => {
         const w = vocab.filter(v => v.lesson_id === lesson.id).map(v => [v.word_en, v.word_ar, v.emoji]);
         const p = sentences.filter(s => s.lesson_id === lesson.id).map(s => [s.sentence_en, s.sentence_ar]);
-        
-        // توليد التمارين باستخدام القوائم المساعدة
-        const generated = generateExercises({ w, p }, allVocabAr, allSentAr, allVocabEn);
-        
-        return {
-          n: lesson.title,
-          c: generated.cards,
-          q: generated.questions
-        };
+
+        // إذا كان هناك مفردات، نقسمها إلى قسمين
+        if (w.length > 0) {
+            let half = Math.ceil(w.length / 2);
+            let w1 = w.slice(0, half);
+            let w2 = w.slice(half);
+            
+            if (w1.length > 0) uiLessons.push(createLessonObj('المفردات (1)', w1, []));
+            if (w2.length > 0) uiLessons.push(createLessonObj('المفردات (2)', w2, []));
+            
+            if (p.length > 0) uiLessons.push(createLessonObj('الجمل', [], p));
+        } 
+        // إذا لم يكن هناك مفردات (مثل وحدات المراجعة)، نقسم الجمل إلى 3 أقسام
+        else if (p.length > 0) {
+            let third = Math.ceil(p.length / 3);
+            let p1 = p.slice(0, third);
+            let p2 = p.slice(third, third*2);
+            let p3 = p.slice(third*2);
+            
+            if (p1.length > 0) uiLessons.push(createLessonObj('القراءة (1)', [], p1));
+            if (p2.length > 0) uiLessons.push(createLessonObj('القراءة (2)', [], p2));
+            if (p3.length > 0) uiLessons.push(createLessonObj('القراءة (3)', [], p3));
+        }
       });
 
       // إضافة تدريب النطق لكل وحدة
@@ -423,7 +427,6 @@ function q(){
  if(cur.qs[cur.i][0]=='sp') return sp();
  var x=cur.qs[cur.i],ty=x[0];cur.sel=null;cur.ans=[];cur.done=false;
  
- // تحديد ما إذا كان السؤال يعتمد على الخيارات المتعددة
  let mc = (ty === 'mc' || ty === 'ls' || ty === 'fb' || ty === 'tf');
  
  if (ty === 'tf') {
@@ -435,7 +438,6 @@ function q(){
  var en = mc && /[A-Za-z]/.test(x[1]);
  var b = '';
 
- // واجهة صح وخطأ
  if (ty === 'tf') {
    b = `<h3>هل الترجمة صحيحة؟</h3>
         <div style="text-align:center; margin: 20px 0; background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--line);">
@@ -448,13 +450,11 @@ function q(){
            <button class="opt" style="text-align:center; justify-content:center; border-color: var(--bad); color: var(--bad); font-weight:700;" data-i="1">❌ خطأ</button>
         </div>`;
  } 
- // واجهة أكمل الفراغ
  else if (ty === 'fb') {
    b = `<h3>أكمل الفراغ بالكلمة الصحيحة:</h3>
         <p class="pr" style="text-align:center; font-size: 24px; margin-bottom: 30px; line-height: 1.8;" dir="ltr">${x[1]}</p>
         ` + cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'">'+o+'</button>'}).join("");
  } 
- // الواجهات القديمة
  else {
    b = mc ? '<h3>'+({mc:"اختر المعنى الصحيح",ls:"استمع واختر",rp:"اختر الرد"})[ty]+'</h3>'+(ty=="ls"?'<p class="pr"><button class="sp lg" id="sp">🔊</button></p>':'<p class="pr"><span dir="auto">'+x[1]+'</span>'+(en?'<button class="sp" id="sp">🔊</button>':'')+'</p>')+cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'">'+o+'</button>'}).join("")
     : '<h3>رتّب الكلمات</h3><p class="pr">'+x[1]+'</p><div class="line" id="ln"></div><div class="bank" id="bk"></div>';

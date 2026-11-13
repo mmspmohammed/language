@@ -18,7 +18,9 @@ button:focus-visible{outline:3px solid var(--xp);outline-offset:2px}
 .btn-main{width:100%;padding:14px;border:0;border-radius:12px;background:var(--pri);color:var(--onpri);font-weight:700;font-size:16px;margin-top:10px}
 .toggle-auth{text-align:center;margin-top:15px;font-size:14px;color:var(--mut);cursor:pointer;text-decoration:underline}
 .profile-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));gap:16px;padding:20px}
-.profile-card{background:var(--card);border:2px solid var(--line);border-radius:16px;padding:20px;text-align:center;cursor:pointer;transition:transform 0.2s}
+
+/* بطاقة الطالب وأزرار التعديل */
+.profile-card{background:var(--card);border:2px solid var(--line);border-radius:16px;padding:20px;text-align:center;cursor:pointer;transition:transform 0.2s;position:relative}
 .profile-card:hover{border-color:var(--pri);transform:translateY(-2px)}
 .profile-avatar{width:60px;height:60px;border-radius:50%;background:var(--okbg);color:var(--pri);display:flex;align-items:center;justify-content:center;font-size:30px;margin:0 auto 10px}
 .profile-name{font-weight:700;font-size:16px}
@@ -26,6 +28,11 @@ button:focus-visible{outline:3px solid var(--xp);outline-offset:2px}
 .add-profile{background:transparent;border:2px dashed var(--line);color:var(--mut)}
 .add-profile:hover{border-color:var(--pri);color:var(--pri)}
 .back-btn{background:none;border:0;color:var(--mut);font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:5px;cursor:pointer}
+
+.profile-actions{position:absolute;top:8px;left:8px;display:flex;gap:6px;z-index:2}
+.profile-actions button{background:var(--bg);border:1px solid var(--line);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.1);transition:transform 0.2s}
+.profile-actions button:hover{transform:scale(1.1);background:var(--card)}
+.btn-del{color:var(--bad)}.btn-edit{color:var(--pri)}
 
 /* الشريط العلوي */
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--line)}
@@ -79,57 +86,12 @@ main{max-width:480px;margin:0 auto;padding-bottom:60px}
 .end h2{font-size:28px;margin:0 0 6px}
 .big{font-size:56px;margin:0}
 
-/* ==========================================
-   نظام الإشعارات المنبثقة الجديد (Toasts)
-   ========================================== */
-#toast-container {
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  pointer-events: none;
-  width: 90%;
-  max-width: 400px;
-}
-
-.toast-notification {
-  background: var(--card);
-  color: var(--ink);
-  padding: 14px 20px;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 15px;
-  font-weight: 600;
-  border-right: 5px solid var(--line);
-  opacity: 0;
-  transform: translateY(-20px);
-  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
-  pointer-events: auto;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  background: rgba(255, 255, 255, 0.9);
-}
-
-@media (prefers-color-scheme: dark) {
-  .toast-notification {
-    background: rgba(21, 41, 58, 0.9);
-  }
-}
-
-.toast-notification.show {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.toast-notification.success { border-right-color: var(--good); }
-.toast-notification.error { border-right-color: var(--bad); }
-.toast-notification.info { border-right-color: var(--pri); }
-
-.toast-icon { font-size: 20px; }
+/* نظام الإشعارات المنبثقة */
+#toast-container{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:10px;pointer-events:none;width:90%;max-width:400px}
+.toast-notification{background:var(--card);color:var(--ink);padding:14px 20px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.15);display:flex;align-items:center;gap:12px;font-size:15px;font-weight:600;border-right:5px solid var(--line);opacity:0;transform:translateY(-20px);transition:all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);pointer-events:auto;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);background:rgba(255,255,255,0.9)}
+@media (prefers-color-scheme:dark){.toast-notification{background:rgba(21,41,58,0.9)}}
+.toast-notification.show{opacity:1;transform:translateY(0)}
+.toast-notification.success{border-right-color:var(--good)}
+.toast-notification.error{border-right-color:var(--bad)}
+.toast-notification.info{border-right-color:var(--pri)}
+.toast-icon{font-size:20px}

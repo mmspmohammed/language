@@ -35,16 +35,15 @@
   </div>
   <div id="profiles-list" class="profile-grid"></div>
   
-  <!-- فورم إضافة طالب جديد -->
+  <!-- فورم إضافة/تعديل طالب -->
   <div id="add-student-form" class="auth-container hidden">
     <div class="auth-card">
       <button id="cancel-add" class="back-btn">← إلغاء</button>
-      <h3 style="margin-top:0;text-align:center;">إضافة طالب جديد</h3>
+      <h3 id="form-title" style="margin-top:0;text-align:center;">إضافة طالب جديد</h3>
       
       <input type="text" id="std-name" class="inp" placeholder="الاسم الثلاثي">
       <input type="number" id="std-age" class="inp" placeholder="العمر">
       
-      <!-- قائمة الصفوف -->
       <select id="std-grade" class="inp" onchange="loadSubjectsForGrade(this.value)">
         <option value="" disabled selected>اختر الصف الدراسي</option>
         <option value="الأول">الصف الأول</option>
@@ -61,12 +60,9 @@
         <option value="البكالوريا">البكالوريا</option>
       </select>
 
-      <!-- حاوية اختيار المواد -->
       <div id="subjects-container" style="margin-bottom:15px; display:none;">
         <p style="font-size:14px; margin-bottom:8px; font-weight:600;">اختر المواد التي تريد دراستها:</p>
-        <div id="subjects-checkboxes" style="display:flex; flex-wrap:wrap; gap:10px;">
-          <!-- سيتم توليد الـ Checkboxes هنا -->
-        </div>
+        <div id="subjects-checkboxes" style="display:flex; flex-wrap:wrap; gap:10px;"></div>
       </div>
 
       <button id="save-student-btn" class="btn-main">حفظ الحساب</button>
@@ -74,7 +70,7 @@
   </div>
 </div>
 
-<!-- شاشة المواد (الجديدة) -->
+<!-- شاشة المواد -->
 <div id="subjects-screen" class="screen">
   <div class="top">
     <div style="display:flex;align-items:center;gap:10px;">
@@ -107,12 +103,11 @@
 <!-- قسم التمارين المنبثق -->
 <section id="L" aria-live="polite"></section>
 
-<!-- حاوية الإشعارات الجديدة -->
+<!-- حاوية الإشعارات -->
 <div id="toast-container"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/supabase.js?v=5"></script>
-<script src="js/lessons.js?v=5"></script>
-<script src="js/app.js?v=5"></script>
+<script src="js/supabase.js?v=12"></script>
+<script src="js/app.js?v=12"></script>
 </body>
 </html>

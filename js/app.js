@@ -8,6 +8,8 @@ if (typeof sb === 'undefined' || !sb) {
 
 let currentUser = null;
 let currentStudent = null;
+let editingStudentId = null; // لحفظ الطالب الذي يتم تعديله
+let currentStudentsList = []; // لحفظ قائمة الطلاب للرجوع إليها عند التعديل
 let S = { xp: 0, streak: 0, last: "", done: [] };
 let U = []; 
 
@@ -241,14 +243,15 @@ async function checkSession() {
 }
 checkSession();
 
-window.loadSubjectsForGrade = function(grade) {
+// تحديث دالة عرض المواد لتقبل المواد المحفوظة (للتعديل)
+window.loadSubjectsForGrade = function(grade, selectedSubjects = []) {
   const container = document.getElementById('subjects-container');
   const checkboxes = document.getElementById('subjects-checkboxes');
   if (!grade || !SUBJECTS_BY_GRADE[grade]) { container.style.display = 'none'; return; }
   container.style.display = 'block';
   checkboxes.innerHTML = SUBJECTS_BY_GRADE[grade].map(subject => `
     <label style="display:flex; align-items:center; gap:5px; background:var(--bg); padding:5px 10px; border-radius:8px; border:1px solid var(--line); cursor:pointer;">
-      <input type="checkbox" value="${subject}" class="subject-cb"> ${subject}
+      <input type="checkbox" value="${subject}" class="subject-cb" ${selectedSubjects.includes(subject) ? 'checked' : ''}> ${subject}
     </label>
   `).join('');
 };
@@ -258,6 +261,8 @@ async function loadStudents() {
   try {
     const { data: students, error } = await sb.from('students').select('*').eq('parent_id', currentUser.id);
     if (error) throw error;
+    
+    currentStudentsList = students; // حفظ القائمة
 
     const grid = document.getElementById('profiles-list');
     document.getElementById('add-student-form').classList.add('hidden');
@@ -267,6 +272,10 @@ async function loadStudents() {
     students.forEach(std => {
       grid.innerHTML += `
         <div class="profile-card" onclick="selectStudent('${std.id}')">
+          <div class="profile-actions">
+            <button class="btn-edit" onclick="editStudent(event, '${std.id}')" title="تعديل">✏️</button>
+            <button class="btn-del" onclick="deleteStudent(event, '${std.id}')" title="حذف">🗑️</button>
+          </div>
           <div class="profile-avatar">${std.full_name.charAt(0)}</div>
           <div class="profile-name">${std.full_name.split(' ')[0]}</div>
           <div class="profile-info">${std.grade} • ${std.age} سنة</div>
@@ -287,8 +296,53 @@ async function loadStudents() {
 }
 
 window.showAddStudent = function() {
+  editingStudentId = null; // تصفير وضع التعديل
+  document.getElementById('form-title').textContent = 'إضافة طالب جديد';
+  document.getElementById('save-student-btn').textContent = 'حفظ الحساب';
+  document.getElementById('std-name').value = '';
+  document.getElementById('std-age').value = '';
+  document.getElementById('std-grade').value = '';
+  document.getElementById('subjects-container').style.display = 'none';
+  
   document.getElementById('profiles-list').classList.add('hidden');
   document.getElementById('add-student-form').classList.remove('hidden');
+};
+
+// دالة فتح شاشة التعديل
+window.editStudent = function(e, id) {
+  e.stopPropagation(); // منع فتح حساب الطالب عند الضغط على زر التعديل
+  const std = currentStudentsList.find(s => s.id === id);
+  if (!std) return;
+
+  editingStudentId = id; // تفعيل وضع التعديل
+  
+  document.getElementById('form-title').textContent = 'تعديل بيانات الطالب';
+  document.getElementById('save-student-btn').textContent = 'حفظ التعديلات';
+  
+  document.getElementById('std-name').value = std.full_name;
+  document.getElementById('std-age').value = std.age;
+  document.getElementById('std-grade').value = std.grade;
+  
+  // تحميل المواد وتحديد المواد المحفوظة مسبقاً
+  loadSubjectsForGrade(std.grade, std.selected_subjects || []);
+
+  document.getElementById('profiles-list').classList.add('hidden');
+  document.getElementById('add-student-form').classList.remove('hidden');
+};
+
+// دالة الحذف
+window.deleteStudent = async function(e, id) {
+  e.stopPropagation();
+  if (!confirm('هل أنت متأكد من حذف هذا الطالب؟ سيتم حذف كل تقدمه أيضاً.')) return;
+
+  try {
+    const { error } = await sb.from('students').delete().eq('id', id);
+    if (error) throw error;
+    toast('تم حذف الطالب بنجاح', 'success');
+    loadStudents();
+  } catch (err) {
+    toast('حدث خطأ أثناء الحذف', 'error');
+  }
 };
 
 document.getElementById('cancel-add').onclick = () => {
@@ -296,6 +350,7 @@ document.getElementById('cancel-add').onclick = () => {
   document.getElementById('profiles-list').classList.remove('hidden');
 };
 
+// حفظ أو تعديل الطالب
 document.getElementById('save-student-btn').onclick = async () => {
   const name = document.getElementById('std-name').value.trim();
   const age = document.getElementById('std-age').value.trim();
@@ -309,16 +364,36 @@ document.getElementById('save-student-btn').onclick = async () => {
   btn.textContent = 'جاري الحفظ...'; btn.disabled = true;
 
   try {
-    const { error } = await withTimeout(sb.from('students').insert({
-      parent_id: currentUser.id, full_name: name, age: parseInt(age), grade: grade, selected_subjects: selectedSubjects
-    }), 10000);
+    let error;
+    if (editingStudentId) {
+      // تحديث بيانات موجودة
+      const res = await withTimeout(sb.from('students').update({
+        full_name: name, age: parseInt(age), grade: grade, selected_subjects: selectedSubjects
+      }).eq('id', editingStudentId), 10000);
+      error = res.error;
+    } else {
+      // إضافة طالب جديد
+      const res = await withTimeout(sb.from('students').insert({
+        parent_id: currentUser.id, full_name: name, age: parseInt(age), grade: grade, selected_subjects: selectedSubjects
+      }), 10000);
+      error = res.error;
+    }
+    
     if (error) throw error;
+    
     document.getElementById('std-name').value = ''; document.getElementById('std-age').value = ''; document.getElementById('std-grade').value = '';
     document.getElementById('subjects-container').style.display = 'none';
-    loadStudents(); toast('تم إضافة الطالب بنجاح', 'success');
+    
+    loadStudents(); 
+    toast(editingStudentId ? 'تم تعديل الطالب بنجاح' : 'تم إضافة الطالب بنجاح', 'success');
+    editingStudentId = null;
+    
   } catch (err) {
-    toast('حدث خطأ أثناء الإضافة: ' + err.message, 'error');
-  } finally { btn.textContent = 'حفظ الحساب'; btn.disabled = false; }
+    toast('حدث خطأ: ' + err.message, 'error');
+  } finally { 
+    btn.textContent = editingStudentId ? 'حفظ التعديلات' : 'حفظ الحساب'; 
+    btn.disabled = false; 
+  }
 };
 
 window.selectStudent = async function(id) {
@@ -345,15 +420,9 @@ window.selectStudent = async function(id) {
       grid.innerHTML = '<p style="text-align:center;color:var(--mut);padding:20px;">لم يتم اختيار أي مادة لهذا الطالب.</p>';
     } else {
       const icons = {
-        "اللغة الإنجليزية": "🇬🇧",
-        "الرياضيات": "🔢",
-        "اللغة العربية": "📖",
-        "العلوم": "🔬",
-        "الاجتماعيات": "🌍",
-        "الدراسات الاجتماعية": "🏛️",
-        "الفيزياء": "⚛️",
-        "الكيمياء": "🧪",
-        "الأحياء": "🧬"
+        "اللغة الإنجليزية": "🇬🇧", "الرياضيات": "🔢", "اللغة العربية": "📖",
+        "العلوم": "🔬", "الاجتماعيات": "🌍", "الدراسات الاجتماعية": "🏛️",
+        "الفيزياء": "⚛️", "الكيمياء": "🧪", "الأحياء": "🧬"
       };
       
       grid.innerHTML = subjects.map(sub => `
@@ -421,7 +490,6 @@ function home(){
  if(!currentStudent) return;
  document.getElementById("cs").textContent="🔥 "+S.streak;
  document.getElementById("cx").textContent="⭐ "+S.xp;
-
  var h="",k=0,off=[0,26,38,26,0,-26,-38,-26],cu=false;
  U.forEach(function(u,ui){
   h+='<div class="unit"><h2>'+u.t+'</h2><p>'+u.en+'</p></div>';
@@ -452,44 +520,24 @@ function start(u,l){
 function q(){
  if(cur.qs[cur.i][0]=='sp') return sp();
  var x=cur.qs[cur.i],ty=x[0];cur.sel=null;cur.ans=[];cur.done=false;
- 
  let mc = (ty === 'mc' || ty === 'ls' || ty === 'fb' || ty === 'tf');
- 
- if (ty === 'tf') {
-   cur.opts = ['true', 'false'];
- } else {
-   cur.opts = mc ? shuf([x[2]].concat(x[3])) : null;
- }
- 
+ if (ty === 'tf') { cur.opts = ['true', 'false']; } else { cur.opts = mc ? shuf([x[2]].concat(x[3])) : null; }
  cur.bank = mc ? null : shuf(x[2].split(" ").concat(x[3]));
  var b = '';
 
  if (ty === 'tf') {
-   b = `<h3>هل هذه المعلومة صحيحة؟</h3>
-        <div style="text-align:center; margin: 20px 0; background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--line);">
-           <p style="font-size: 24px; font-weight: bold; color: var(--pri); margin-bottom: 10px;" dir="auto">${x[1]}</p>
-           <p style="font-size: 20px; color: var(--mut); margin: 10px 0;">⬇️</p>
-           <p style="font-size: 22px; font-weight: bold;" dir="auto">${x[2]}</p>
-        </div>
-        <div style="display:flex; gap:10px; margin-top:20px;">
-           <button class="opt" style="text-align:center; justify-content:center; border-color: var(--good); color: var(--good); font-weight:700;" data-i="0">✅ صح</button>
-           <button class="opt" style="text-align:center; justify-content:center; border-color: var(--bad); color: var(--bad); font-weight:700;" data-i="1">❌ خطأ</button>
-        </div>`;
+   b = `<h3>هل هذه المعلومة صحيحة؟</h3><div style="text-align:center; margin: 20px 0; background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--line);"><p style="font-size: 24px; font-weight: bold; color: var(--pri); margin-bottom: 10px;" dir="auto">${x[1]}</p><p style="font-size: 20px; color: var(--mut); margin: 10px 0;">⬇️</p><p style="font-size: 22px; font-weight: bold;" dir="auto">${x[2]}</p></div><div style="display:flex; gap:10px; margin-top:20px;"><button class="opt" style="text-align:center; justify-content:center; border-color: var(--good); color: var(--good); font-weight:700;" data-i="0">✅ صح</button><button class="opt" style="text-align:center; justify-content:center; border-color: var(--bad); color: var(--bad); font-weight:700;" data-i="1">❌ خطأ</button></div>`;
  } 
  else if (ty === 'fb') {
-   b = `<h3>أكمل الفراغ بالإجابة الصحيحة:</h3>
-        <p class="pr" style="text-align:center; font-size: 22px; margin-bottom: 30px; line-height: 1.8;" dir="auto">${x[1]}</p>
-        ` + cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'">'+o+'</button>'}).join("");
+   b = `<h3>أكمل الفراغ بالإجابة الصحيحة:</h3><p class="pr" style="text-align:center; font-size: 22px; margin-bottom: 30px; line-height: 1.8;" dir="auto">${x[1]}</p>` + cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'">'+o+'</button>'}).join("");
  } 
  else {
-   b = mc ? '<h3>'+({mc:"اختر الإجابة الصحيحة",ls:"استمع واختر",rp:"اختر الرد"})[ty]+'</h3>'+(ty=="ls"?'<p class="pr"><button class="sp lg" id="sp">🔊</button></p>':'<p class="pr"><span dir="auto" style="font-size: 22px;">'+x[1]+'</span></p>')+cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'">'+o+'</button>'}).join("")
-    : '<h3>رتّب الكلمات لتكوين جملة صحيحة</h3><p class="pr">'+x[1]+'</p><div class="line" id="ln"></div><div class="bank" id="bk"></div>';
+   b = mc ? '<h3>'+({mc:"اختر الإجابة الصحيحة",ls:"استمع واختر",rp:"اختر الرد"})[ty]+'</h3>'+(ty=="ls"?'<p class="pr"><button class="sp lg" id="sp">🔊</button></p>':'<p class="pr"><span dir="auto" style="font-size: 22px;">'+x[1]+'</span></p>')+cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'">'+o+'</button>'}).join("") : '<h3>رتّب الكلمات لتكوين جملة صحيحة</h3><p class="pr">'+x[1]+'</p><div class="line" id="ln"></div><div class="bank" id="bk"></div>';
  }
 
  $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"><i style="width:'+(cur.i/cur.qs.length*100)+'%"></i></div><span class="chip">'+(cur.t?'📝 اختبار':'❤️ '+cur.h)+'</span></div><div class="lb">'+b+'</div><div class="lf" id="ft"><div><button class="btn" id="ck" disabled>تحقق</button></div></div>';
  $("#cl").onclick=close;$("#ck").onclick=check;
- if(mc)$(".lb").onclick=function(e){var o=e.target.closest(".opt");if(!o||cur.done)return;
-  [].forEach.call(document.querySelectorAll(".opt"),function(z){z.classList.remove("sel")});o.classList.add("sel");cur.sel=+o.dataset.i;$("#ck").disabled=false};
+ if(mc)$(".lb").onclick=function(e){var o=e.target.closest(".opt");if(!o||cur.done)return; [].forEach.call(document.querySelectorAll(".opt"),function(z){z.classList.remove("sel")});o.classList.add("sel");cur.sel=+o.dataset.i;$("#ck").disabled=false};
  else bw();
 }
 
@@ -503,17 +551,10 @@ function bw(){
 
 function check(){
  var x=cur.qs[cur.i],ty=x[0],ok;cur.done=true;
- 
- if (ty === 'tf') {
-   ok = (cur.opts[cur.sel] === x[3]);
- } else if (ty === 'fb') {
-   ok = (cur.opts[cur.sel] === x[2]);
- } else if (ty === 'bw') {
-   ok = (cur.ans.map(function(i){return cur.bank[i]}).join(" ") === x[2]);
- } else {
-   ok = (cur.opts[cur.sel] === x[2]);
- }
-
+ if (ty === 'tf') { ok = (cur.opts[cur.sel] === x[3]); }
+ else if (ty === 'fb') { ok = (cur.opts[cur.sel] === x[2]); }
+ else if (ty === 'bw') { ok = (cur.ans.map(function(i){return cur.bank[i]}).join(" ") === x[2]); }
+ else { ok = (cur.opts[cur.sel] === x[2]); }
  if(ok)cur.ok++;else cur.h--;
  var f=$("#ft");f.className="lf "+(ok?"ok":"no");
  f.innerHTML='<div><p>'+(ok?"أحسنت! إجابة صحيحة":"الإجابة الصحيحة:")+'</p>'+(ok?'':'<p class="en" dir="auto" style="font-size:18px;">'+x[2]+'</p>')+'<button class="btn" id="nx">متابعة</button></div>';

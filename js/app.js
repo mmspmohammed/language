@@ -50,7 +50,6 @@ function shuf(a){a=a.slice();for(var i=a.length-1;i>0;i--){var j=Math.floor(Math
 function pk(a,n,ex){return shuf(a.filter((x,i)=>a.indexOf(x)==i&&ex.indexOf(x)<0)).slice(0,n)}
 function pk2(a,b,n,ex){var r=pk(a,n,ex);return r.length<n?r.concat(pk(b,n-r.length,ex.concat(r))):r}
 
-// 🔥 محدّث: دعم السرعة في النطق
 function say(t, rate) {
   try {
     speechSynthesis.cancel();
@@ -62,13 +61,12 @@ function say(t, rate) {
 }
 
 // ==========================================
-// 3. محرك توليد التمارين (مُطوّر - خلط تلقائي)
+// 3. محرك توليد التمارين (مُطوّر)
 // ==========================================
 function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, subject) {
   const L = [], W = lessonData.w || [], P = lessonData.p || [];
   const wa = W.map(w => w[1]), pa = P.map(p => p[1]);
   const isArabic = (subject === "الدراسات الاجتماعية" || subject === "اللغة العربية" || subject === "الاجتماعيات");
-
   const allQuestions = [];
 
   if (W.length > 0) {
@@ -81,11 +79,9 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
       qs.push(['tf', w[0], randomAr, isTrue ? 'true' : 'false']);
       if (!isArabic) {
         qs.push(['ls', w[0], w[0], pk(W.map(z => z[0]), 2, [w[0]])]);
+        // 🔥 تمرين ترتيب الحروف - يُخزن مع الترجمة العربية
         if (w[0].length >= 3 && w[0].length <= 8 && !w[0].includes(' ')) {
-          const shuffled = shuf(w[0].toLowerCase().split('')).join('');
-          if (shuffled !== w[0].toLowerCase()) {
-            qs.push(['us', w[0], w[0].toLowerCase(), shuffled]);
-          }
+          qs.push(['us', w[0], w[0].toLowerCase(), null, w[1]]);
         }
       }
       wordQs.push(qs);
@@ -154,8 +150,7 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
     L.push({n: 'الأسئلة والمعلومات', c: P, q: []});
   }
 
-  const finalQuestions = shuf(allQuestions);
-  return { cards: L.flatMap(l => l.c), questions: finalQuestions };
+  return { cards: L.flatMap(l => l.c), questions: shuf(allQuestions) };
 }
 
 // ==========================================
@@ -198,36 +193,26 @@ async function loadCurriculumFromDB(grade, subject) {
       const SENTS_PER_NODE = Math.max(2, Math.ceil(allSents.length / 5));
 
       const wordChunks = [];
-      for (let i = 0; i < allWords.length; i += WORDS_PER_NODE) {
-        wordChunks.push(allWords.slice(i, i + WORDS_PER_NODE));
-      }
+      for (let i = 0; i < allWords.length; i += WORDS_PER_NODE) wordChunks.push(allWords.slice(i, i + WORDS_PER_NODE));
       const sentChunks = [];
-      for (let i = 0; i < allSents.length; i += SENTS_PER_NODE) {
-        sentChunks.push(allSents.slice(i, i + SENTS_PER_NODE));
-      }
+      for (let i = 0; i < allSents.length; i += SENTS_PER_NODE) sentChunks.push(allSents.slice(i, i + SENTS_PER_NODE));
 
       const maxChunks = Math.max(wordChunks.length, sentChunks.length);
       const contentNodes = Math.min(5, maxChunks);
 
-      // 🔥 كل عقدة تحتوي على 2-3 دروس داخلية
       for (let i = 0; i < contentNodes; i++) {
         const w = wordChunks[i] || [];
         const p = sentChunks[i] || [];
         const innerLessons = [];
 
-        // الدرس 1: المفردات
         if (w.length > 0) {
           const genW = generateExercises({w: w, p: []}, allVocabAr, allSentAr, allVocabEn, subject);
           innerLessons.push({n: 'المفردات الجديدة', c: genW.cards, q: genW.questions});
         }
-
-        // الدرس 2: الجمل
         if (p.length > 0) {
           const genP = generateExercises({w: [], p: p}, allVocabAr, allSentAr, allVocabEn, subject);
           innerLessons.push({n: 'الجمل والعبارات', c: genP.cards, q: genP.questions});
         }
-
-        // الدرس 3: تمارين شاملة (إذا كان هناك محتوى كافٍ)
         if (w.length > 0 && p.length > 0) {
           const genAll = generateExercises({w: w, p: p}, allVocabAr, allSentAr, allVocabEn, subject);
           innerLessons.push({n: 'تمارين شاملة', c: [], q: genAll.questions});
@@ -236,13 +221,10 @@ async function loadCurriculumFromDB(grade, subject) {
         uiLessons.push({n: 'الجزء ' + (i + 1), lessons: innerLessons});
       }
 
-      // العقدة 6: تدريب النطق أو مراجعة
       if (!isArabic && allWords.length > 0) {
         const uniqueWords = [];
         const seenWords = new Set();
-        allWords.forEach(w => {
-          if (!seenWords.has(w[0])) { seenWords.add(w[0]); uniqueWords.push(w); }
-        });
+        allWords.forEach(w => { if (!seenWords.has(w[0])) { seenWords.add(w[0]); uniqueWords.push(w); } });
         const sq = [];
         const n = Math.min(8, uniqueWords.length);
         for (let k = 0; k < n; k++) {
@@ -256,7 +238,6 @@ async function loadCurriculumFromDB(grade, subject) {
         uiLessons.push({n: 'مراجعة سريعة', c: [], q: shuf(reviewPool).slice(0, 8)});
       }
 
-      // العقدة 7: اختبار الوحدة
       const pool = uiLessons.flatMap(l => l.lessons ? l.lessons.flatMap(il => il.q) : (l.q || []));
       uiLessons.push({n: 'اختبار الوحدة', c: [], test: 1, pool: pool, q: []});
 
@@ -271,7 +252,7 @@ async function loadCurriculumFromDB(grade, subject) {
 }
 
 // ==========================================
-// 5. المصادقة وإدارة الطلاب
+// 5. المصادقة وإدارة الطلاب (بدون تغيير)
 // ==========================================
 let isLoginMode = true;
 document.getElementById('auth-toggle').onclick = () => {
@@ -317,13 +298,8 @@ document.getElementById('logout-btn').onclick = async () => {
 
 async function checkSession() {
   const { data } = await sb.auth.getSession();
-  if (data.session) {
-    currentUser = data.session.user;
-    showScreen('profiles-screen');
-    loadStudents();
-  } else {
-    showScreen('auth-screen');
-  }
+  if (data.session) { currentUser = data.session.user; showScreen('profiles-screen'); loadStudents(); }
+  else { showScreen('auth-screen'); }
 }
 checkSession();
 
@@ -362,15 +338,13 @@ async function loadStudents() {
           <div style="font-size:11px;margin-top:5px;color:${std.subscription_status === 'active' ? 'var(--good)' : 'var(--xp)'}">
             ${std.subscription_status === 'active' ? '✅ مشترك' : '⏳ تجريبي'}
           </div>
-        </div>
-      `;
+        </div>`;
     });
     grid.innerHTML += `
       <div class="profile-card add-profile" onclick="showAddStudent()">
         <div class="profile-avatar" style="background:transparent;border:2px dashed var(--line);color:var(--mut)">+</div>
         <div class="profile-name" style="color:var(--mut)">إضافة طالب</div>
-      </div>
-    `;
+      </div>`;
   } catch (err) { toast('حدث خطأ في جلب بيانات الطلاب', 'error'); }
 }
 
@@ -429,14 +403,10 @@ document.getElementById('save-student-btn').onclick = async () => {
   try {
     let error;
     if (editingStudentId) {
-      const res = await withTimeout(sb.from('students').update({
-        full_name: name, age: parseInt(age), grade: grade, selected_subjects: selectedSubjects
-      }).eq('id', editingStudentId), 10000);
+      const res = await withTimeout(sb.from('students').update({ full_name: name, age: parseInt(age), grade: grade, selected_subjects: selectedSubjects }).eq('id', editingStudentId), 10000);
       error = res.error;
     } else {
-      const res = await withTimeout(sb.from('students').insert({
-        parent_id: currentUser.id, full_name: name, age: parseInt(age), grade: grade, selected_subjects: selectedSubjects
-      }), 10000);
+      const res = await withTimeout(sb.from('students').insert({ parent_id: currentUser.id, full_name: name, age: parseInt(age), grade: grade, selected_subjects: selectedSubjects }), 10000);
       error = res.error;
     }
     if (error) throw error;
@@ -445,12 +415,8 @@ document.getElementById('save-student-btn').onclick = async () => {
     loadStudents();
     toast(editingStudentId ? 'تم تعديل الطالب بنجاح' : 'تم إضافة الطالب بنجاح', 'success');
     editingStudentId = null;
-  } catch (err) {
-    toast('حدث خطأ: ' + err.message, 'error');
-  } finally {
-    btn.textContent = editingStudentId ? 'حفظ التعديلات' : 'حفظ الحساب';
-    btn.disabled = false;
-  }
+  } catch (err) { toast('حدث خطأ: ' + err.message, 'error'); }
+  finally { btn.textContent = editingStudentId ? 'حفظ التعديلات' : 'حفظ الحساب'; btn.disabled = false; }
 };
 
 window.selectStudent = async function(id) {
@@ -480,8 +446,7 @@ window.selectStudent = async function(id) {
         <div class="profile-card" onclick="openSubject('${sub}')">
           <div class="profile-avatar" style="font-size:32px;">${icons[sub] || '📚'}</div>
           <div class="profile-name">${sub}</div>
-        </div>
-      `).join('');
+        </div>`).join('');
     }
     showScreen('subjects-screen');
   } catch (err) { toast('حدث خطأ في تحميل بيانات الطالب', 'error'); }
@@ -502,7 +467,7 @@ window.openSubject = async function(subjectName) {
               <div style="text-align:center; padding:50px 20px; color:var(--mut);">
                 <p style="font-size:50px; margin:0;">🚧</p>
                 <h2 style="margin:10px 0;">المنهاج قيد الإعداد</h2>
-                <p>لم نتمكن من العثور على دروس لمادة <b>${subjectName}</b> للصف <b>${currentStudent.grade}</b> في قاعدة البيانات.</p>
+                <p>لم نتمكن من العثور على دروس لمادة <b>${subjectName}</b> للصف <b>${currentStudent.grade}</b>.</p>
               </div>`;
             return;
         }
@@ -531,7 +496,7 @@ async function save() {
 var cur=null,$=function(s){return document.querySelector(s)};
 
 // ==========================================
-// 6. عرض المسار (Path)
+// 6. عرض المسار (مُطوّر - يتتبع الدروس الداخلية)
 // ==========================================
 function home(){
  if(!currentStudent) return;
@@ -542,7 +507,17 @@ function home(){
   h+='<div class="unit"><h2>'+u.t+'</h2><p>'+u.en+'</p></div>';
   if(!u.l.length)h+='<p class="soon">قريباً</p>';
   u.l.forEach(function(q,li){
-   var id=ui+"-"+li,d=S.done.indexOf(id)>-1,c=!d&&!cu,st=d?"done":c?"":"lock";if(c)cu=true;
+   var id=ui+"-"+li;
+   var d;
+   // 🔥 العقدة ذات الدروس الداخلية: مكتملة فقط إذا كل دروسها مكتملة
+   if(q.lessons){
+     d = q.lessons.every(function(_, ili){
+       return S.done.indexOf(id+"-"+ili) > -1;
+     });
+   } else {
+     d = S.done.indexOf(id) > -1;
+   }
+   var c=!d&&!cu,st=d?"done":c?"":"lock";if(c)cu=true;
    h+='<button class="node '+st+'" style="transform:translateX('+off[k%8]+'px)" data-u="'+ui+'" data-l="'+li+'">'+(d?"✓":q.test?"🏆":"★")+'</button>';k++;
   });
  });
@@ -556,12 +531,11 @@ document.getElementById("path").onclick=function(e){
 };
 
 // ==========================================
-// 7. بدء العقدة والدروس الداخلية 🔥
+// 7. بدء العقدة (مُطوّر - يبدأ من أول درس غير مكتمل)
 // ==========================================
 function start(u,l){
  var ls=U[u].l[l];
 
- // اختبار الوحدة
  if(ls.test){
    cur={id:u+"-"+l,u:u,l:l,t:true,qs:shuf(ls.pool).slice(0,10),i:0,h:5,ok:0};
    $("#L").className="open";
@@ -569,15 +543,22 @@ function start(u,l){
    return;
  }
 
- // عقدة متعددة الدروس
  if(ls.lessons){
-   cur={id:u+"-"+l,u:u,l:l,t:false,lessons:ls.lessons,li:0,h:5,ok:0,totalOk:0};
+   // 🔥 إيجاد أول درس غير مكتمل
+   var startLi = 0;
+   var baseId = u+"-"+l;
+   for(var i=0; i<ls.lessons.length; i++){
+     if(S.done.indexOf(baseId+"-"+i) === -1){
+       startLi = i;
+       break;
+     }
+   }
+   cur={id:baseId,u:u,l:l,t:false,lessons:ls.lessons,li:startLi,h:5,ok:0,totalOk:0};
    $("#L").className="open";
    showLesson();
    return;
  }
 
- // عقدة عادية (نطق أو مراجعة)
  cur={id:u+"-"+l,u:u,l:l,t:false,qs:ls.q,i:0,h:5,ok:0};
  $("#L").className="open";
  if(!ls.c || !ls.c.length){q();return}
@@ -585,7 +566,7 @@ function start(u,l){
  $("#cl").onclick=close; $("#go").onclick=function(){q()};
 }
 
-// 🔥 عرض درس داخل العقدة
+// 🔥 عرض درس داخل العقدة مع شريط تقدم الدروس
 function showLesson(){
  var lesson=cur.lessons[cur.li];
  cur.qs=lesson.q;
@@ -593,29 +574,44 @@ function showLesson(){
  cur.ok=0;
  cur.h=5;
 
- if(!lesson.c || !lesson.c.length){q();return}
-
  var lessonNum=cur.li+1;
  var totalLessons=cur.lessons.length;
- $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"></div><span class="chip">📖 درس '+lessonNum+'/'+totalLessons+'</span></div><div class="lb"><h3>'+lesson.n+'</h3><p>اقرأ المعلومات التالية بتركيز:</p>'+lesson.c.map(function(c,i){return '<div class="card"><b dir="auto">'+c[0]+'</b><span>'+c[1]+'</span></div>'}).join("")+'</div><div class="lf"><div><button class="btn" id="go">ابدأ التمارين</button></div></div>';
+
+ // 🔥 شريط تقدم الدروس داخل العقدة
+ var progressDots='';
+ for(var i=0;i<totalLessons;i++){
+   var isDone=S.done.indexOf(cur.id+"-"+i)>-1;
+   var isCurrent=i===cur.li;
+   var dotStyle='width:12px;height:12px;border-radius:50%;display:inline-block;margin:0 3px;';
+   if(isDone) dotStyle+='background:var(--good);';
+   else if(isCurrent) dotStyle+='background:var(--pri);';
+   else dotStyle+='background:var(--line);';
+   progressDots+='<span style="'+dotStyle+'"></span>';
+ }
+
+ if(!lesson.c || !lesson.c.length){
+   $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"></div><span class="chip">📖 '+lessonNum+'/'+totalLessons+'</span></div><div style="text-align:center;padding:10px;">'+progressDots+'</div><div class="lb" id="lb"></div><div class="lf" id="ft"><div><button class="btn" id="ck" disabled>تحقق</button></div></div>';
+   $("#cl").onclick=close;
+   q();
+   return;
+ }
+
+ $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"></div><span class="chip">📖 '+lessonNum+'/'+totalLessons+'</span></div><div style="text-align:center;padding:10px;">'+progressDots+'</div><div class="lb"><h3>'+lesson.n+'</h3><p>اقرأ المعلومات التالية بتركيز:</p>'+lesson.c.map(function(c,i){return '<div class="card"><b dir="auto">'+c[0]+'</b><span>'+c[1]+'</span></div>'}).join("")+'</div><div class="lf"><div><button class="btn" id="go">ابدأ التمارين</button></div></div>';
  $("#cl").onclick=close;
  $("#go").onclick=function(){q()};
 }
 
 // ==========================================
-// 8. عرض التمارين (مُطوّر + أزرار الصوت 🔊🐢)
+// 8. عرض التمارين (مُطوّر + تمرين الحروف بالنقر)
 // ==========================================
 function q(){
  if(cur.qs[cur.i][0]=='sp') return sp();
  var x=cur.qs[cur.i],ty=x[0];cur.sel=null;cur.ans=[];cur.done=false;
- var isArabicSubject=(ty==='oo');
  let mc = (ty === 'mc' || ty === 'ls' || ty === 'fb' || ty === 'tf' || ty === 'oo');
  if (ty === 'tf') { cur.opts = ['true', 'false']; } else { cur.opts = mc ? shuf([x[2]].concat(x[3])) : null; }
- if (ty === 'us') { cur.scrambled = x[3]; }
  cur.bank = mc ? null : shuf(x[2].split(" ").concat(x[3]));
  var b = '';
 
- // 🔥 تحديد إذا كان يجب إضافة أزرار الصوت
  var hasAudio = false;
  var audioText = '';
  if (ty === 'mc' || ty === 'tf' || ty === 'fb' || ty === 'ls') {
@@ -634,10 +630,29 @@ function q(){
    b+='<div style="display:flex; gap:10px; margin-top:20px;"><button class="opt" style="text-align:center; justify-content:center; border-color: var(--good); color: var(--good); font-weight:700;" data-i="0">✅ صح</button><button class="opt" style="text-align:center; justify-content:center; border-color: var(--bad); color: var(--bad); font-weight:700;" data-i="1">❌ خطأ</button></div>';
  }
  else if (ty === 'oo') {
-   b = '<h3>🎯 اختر الكلمة الشاذة (المختلفة عن الباقي):</h3><p style="text-align:center; color:var(--mut); margin-bottom:20px;">واحدة من هذه الكلمات لا تنتمي للمجموعة</p><div style="margin: 20px 0;">' + cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'" style="text-align:center; font-size:20px; padding:18px; margin-bottom:12px;">'+o+'</button>'}).join("") + '</div>';
+   b = '<h3>🎯 اختر الكلمة الشاذة:</h3><p style="text-align:center; color:var(--mut); margin-bottom:20px;">واحدة من هذه الكلمات لا تنتمي للمجموعة</p><div style="margin: 20px 0;">' + cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'" style="text-align:center; font-size:20px; padding:18px; margin-bottom:12px;">'+o+'</button>'}).join("") + '</div>';
  }
+ // 🔥 تمرين ترتيب الحروف بالنقر
  else if (ty === 'us') {
-   b = '<h3>🔤 أعد ترتيب الحروف لتكوين الكلمة:</h3><div style="text-align:center; margin: 30px 0;"><p style="font-size: 18px; color: var(--mut); margin-bottom: 15px;">المعنى: <b dir="auto" style="color:var(--pri);">'+x[1]+'</b></p><div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin: 30px 0;">' + cur.scrambled.split('').map(function(letter){return '<div style="width:50px; height:60px; background:var(--pri); color:var(--onpri); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:bold; box-shadow:0 4px 0 var(--pri2);">'+letter.toUpperCase()+'</div>'}).join('') + '</div><input type="text" id="us-answer" class="inp" dir="ltr" placeholder="اكتب الكلمة هنا..." style="font-size:20px; text-align:center; letter-spacing:3px; max-width:300px; margin:20px auto 0; display:block;"></div>';
+   var word = x[2];
+   var meaning = x[4] || x[1];
+   var letters = shuf(word.split(''));
+   while (letters.join('') === word && letters.length > 1) { letters = shuf(letters); }
+   cur.usWord = word;
+   cur.usLetters = letters;
+   cur.usSelected = [];
+
+   b = '<h3>🔤 رتّب الحروف لتكوين الكلمة:</h3>';
+   b += '<div style="text-align:center; margin: 20px 0;">';
+   b += '<p style="font-size: 20px; margin-bottom: 5px;">الترجمة: <b dir="auto" style="color:var(--pri); font-size:22px;">'+meaning+'</b></p>';
+   b += '<div style="display:flex; gap:10px; justify-content:center; margin: 15px 0;">';
+   b += '<button class="sp" id="us-say" title="استمع" style="font-size:24px; padding:10px 18px;">🔊</button>';
+   b += '<button class="sp" id="us-say-slow" title="استمع ببطء" style="font-size:24px; padding:10px 18px;">🐢</button>';
+   b += '</div>';
+   b += '<div id="us-selected" style="display:flex; gap:6px; justify-content:center; flex-wrap:wrap; min-height:60px; margin:15px 0; padding:12px; border:2px dashed var(--line); border-radius:12px; background:var(--card);"></div>';
+   b += '<div id="us-bank" style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin:15px 0;"></div>';
+   b += '<button id="us-clear" class="btn alt" style="width:auto; padding:10px 25px; margin-top:10px; font-size:15px;">🔄 مسح</button>';
+   b += '</div>';
  }
  else if (ty === 'fb') {
    b = '<h3>أكمل الفراغ بالإجابة الصحيحة:</h3><p class="pr" style="text-align:center; font-size: 22px; margin-bottom: 15px; line-height: 1.8;" dir="auto">'+x[1]+'</p>';
@@ -661,10 +676,11 @@ function q(){
    }
  }
 
- $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"><i style="width:'+(cur.i/cur.qs.length*100)+'%"></i></div><span class="chip">'+(cur.t?'📝 اختبار':'❤️ '+cur.h)+'</span></div><div class="lb">'+b+'</div><div class="lf" id="ft"><div><button class="btn" id="ck" disabled>تحقق</button></div></div>';
+ var progressBar = cur.lessons ? '' : '<div class="bar"><i style="width:'+(cur.i/cur.qs.length*100)+'%"></i></div>';
+
+ $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button>'+progressBar+'<span class="chip">'+(cur.t?'📝 اختبار':'❤️ '+cur.h)+'</span></div><div class="lb">'+b+'</div><div class="lf" id="ft"><div><button class="btn" id="ck" disabled>تحقق</button></div></div>';
  $("#cl").onclick=close;$("#ck").onclick=check;
 
- // 🔥 ربط أزرار الصوت
  if(hasAudio){
    var sayNormal=document.getElementById('say-normal');
    var saySlow=document.getElementById('say-slow');
@@ -672,7 +688,6 @@ function q(){
    if(saySlow) saySlow.onclick=function(e){e.stopPropagation();say(audioText,0.5);};
  }
 
- // ربط أزرار الصوت في تمرين الاستماع
  if(ty === 'ls'){
    var spBtn=document.getElementById('sp');
    var spSlow=document.getElementById('sp-slow');
@@ -680,13 +695,11 @@ function q(){
    if(spSlow) spSlow.onclick=function(){say(x[1],0.5);};
  }
 
- if (ty === 'us') {
-   const input = document.getElementById('us-answer');
-   if (input) {
-     input.focus();
-     input.addEventListener('input', function() { $("#ck").disabled = input.value.trim().length === 0; });
-     input.addEventListener('keypress', function(e) { if (e.key === 'Enter' && input.value.trim().length > 0) { check(); } });
-   }
+ // 🔥 ربط أحداث تمرين ترتيب الحروف
+ if(ty === 'us'){
+   usRender();
+   document.getElementById('us-say').onclick=function(e){e.stopPropagation();say(cur.usWord,1);};
+   document.getElementById('us-say-slow').onclick=function(e){e.stopPropagation();say(cur.usWord,0.5);};
  }
  else if(mc){
    $(".lb").onclick=function(e){
@@ -699,7 +712,46 @@ function q(){
      $("#ck").disabled=false;
    };
  }
- else bw();
+ else if(ty !== 'us') bw();
+}
+
+// 🔥 دالة عرض تمرين ترتيب الحروف
+function usRender(){
+ var selEl=document.getElementById('us-selected');
+ var bankEl=document.getElementById('us-bank');
+ if(!selEl||!bankEl)return;
+
+ selEl.innerHTML=cur.usSelected.map(function(idx,pos){
+   return '<button class="w" data-pos="'+pos+'" style="width:48px;height:52px;font-size:24px;background:var(--pri);color:var(--onpri);border:none;border-radius:10px;box-shadow:0 3px 0 var(--pri2);">'+cur.usLetters[idx].toUpperCase()+'</button>';
+ }).join('');
+
+ bankEl.innerHTML=cur.usLetters.map(function(letter,i){
+   var used=cur.usSelected.indexOf(i)>-1;
+   return '<button class="w'+(used?' used':'')+'" data-i="'+i+'" style="width:48px;height:52px;font-size:24px;">'+letter.toUpperCase()+'</button>';
+ }).join('');
+
+ $("#ck").disabled=cur.usSelected.length!==cur.usLetters.length;
+
+ bankEl.onclick=function(e){
+   var btn=e.target.closest('.w');
+   if(!btn||cur.done)return;
+   var idx=+btn.dataset.i;
+   if(cur.usSelected.indexOf(idx)===-1){
+     cur.usSelected.push(idx);
+     usRender();
+   }
+ };
+
+ selEl.onclick=function(e){
+   var btn=e.target.closest('.w');
+   if(!btn||cur.done)return;
+   var pos=+btn.dataset.pos;
+   cur.usSelected.splice(pos,1);
+   usRender();
+ };
+
+ var clearBtn=document.getElementById('us-clear');
+ if(clearBtn) clearBtn.onclick=function(){ cur.usSelected=[]; usRender(); };
 }
 
 function bw(){
@@ -711,7 +763,7 @@ function bw(){
 }
 
 // ==========================================
-// 9. تقييم الإجابات
+// 9. تقييم الإجابات (مُطوّر)
 // ==========================================
 function check(){
  var x=cur.qs[cur.i],ty=x[0],ok;cur.done=true;
@@ -720,9 +772,8 @@ function check(){
  else if (ty === 'bw') { ok = (cur.ans.map(function(i){return cur.bank[i]}).join(" ") === x[2]); }
  else if (ty === 'oo') { ok = (cur.opts[cur.sel] === x[2]); }
  else if (ty === 'us') {
-   const input = document.getElementById('us-answer');
-   const userAnswer = input ? input.value.trim().toLowerCase() : '';
-   ok = (userAnswer === x[2].toLowerCase());
+   var userWord = cur.usSelected.map(function(i){return cur.usLetters[i]}).join('');
+   ok = (userWord === cur.usWord);
  }
  else { ok = (cur.opts[cur.sel] === x[2]); }
  if(ok)cur.ok++;else cur.h--;
@@ -734,21 +785,31 @@ function check(){
 function next(){ if(cur.h<=0&&!cur.t)return end(false); cur.i++; cur.i>=cur.qs.length?(cur.t?endT():end(true)):q() }
 
 // ==========================================
-// 10. إنهاء الدرس/العقدة 🔥
+// 10. إنهاء الدرس/العقدة (مُطوّر - حفظ كل درس)
 // ==========================================
 function end(w){
- // عقدة متعددة الدروس
  if(cur.lessons){
    if(w){
+     // 🔥 حفظ تقدم الدرس الحالي فوراً
+     var lessonId = cur.id+"-"+cur.li;
+     if(S.done.indexOf(lessonId)<0) S.done.push(lessonId);
+     save();
+
      cur.totalOk += cur.ok;
      cur.li++;
+
+     // تخطي الدروس المكتملة مسبقاً
+     while(cur.li < cur.lessons.length && S.done.indexOf(cur.id+"-"+cur.li) > -1){
+       cur.li++;
+     }
+
      if(cur.li < cur.lessons.length){
        showLesson();
        return;
      }
+
      var g=10+cur.totalOk*2;
      S.xp+=g;
-     if(S.done.indexOf(cur.id)<0)S.done.push(cur.id);
      save();
      $("#L").innerHTML='<div class="lb end"><p class="big">🎉</p><h2>أكملت كل الدروس!</h2><p>أحسنت! أنهيت '+cur.lessons.length+' دروس بنجاح</p></div><div class="lf"><div><button class="btn" id="bk2">متابعة</button></div></div>';
      $("#bk2").onclick=close;
@@ -759,7 +820,6 @@ function end(w){
    return;
  }
 
- // عقدة عادية
  var g=0;
  if(w){g=10+cur.ok*2;S.xp+=g;if(S.done.indexOf(cur.id)<0)S.done.push(cur.id);save()}
  $("#L").innerHTML='<div class="lb end"><p class="big">'+(w?"🎉":"💔")+'</p><h2>'+(w?"أكملت!":"انتهت القلوب")+'</h2></div><div class="lf"><div><button class="btn" id="bk2">متابعة</button></div></div>';

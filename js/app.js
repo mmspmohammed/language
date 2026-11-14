@@ -61,11 +61,12 @@ function say(t, rate) {
 }
 
 // ==========================================
-// 3. محرك توليد التمارين (يدعم question_type)
+// 3. محرك توليد التمارين (مُطوّر للتكرار المكثف)
 // ==========================================
 function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, subject) {
   const L = [], W = lessonData.w || [], P = lessonData.p || [];
   const wa = W.map(w => w[1]), pa = P.map(p => p[1]);
+  const we = W.map(w => w[0]), pe = P.map(p => p[0]);
   const isArabic = (subject === "الدراسات الاجتماعية" || subject === "اللغة العربية" || subject === "الاجتماعيات");
   const allQuestions = [];
 
@@ -73,12 +74,30 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
     const wordQs = [];
     W.forEach(w => {
       const qs = [];
-      qs.push(['mc', w[0], w[1], pk2(wa, allWordsAr, 2, [w[1]])]);
-      let isTrue = Math.random() > 0.5;
-      let randomAr = isTrue ? w[1] : (pk2(wa, allWordsAr, 1, [w[1]])[0] || 'غير معروف');
-      qs.push(['tf', w[0], randomAr, isTrue ? 'true' : 'false']);
+      
+      // 🔁 التكرار 1: إنجليزي ➔ عربي (اختيار من متعدد)
+      qs.push(['mc', w[0], w[1], pk2(wa, allWordsAr, 3, [w[1]])]);
+      
+      // 🔁 التكرار 2: عربي ➔ إنجليزي (اختيار من متعدد) - لعكس الاتجاه
       if (!isArabic) {
-        qs.push(['ls', w[0], w[0], pk(W.map(z => z[0]), 2, [w[0]])]);
+        qs.push(['mc', w[1], w[0], pk2(we, allWordsEn, 3, [w[0]])]);
+      }
+
+      // 🔁 التكرار 3: صح أو خطأ (إنجليزي ➔ عربي)
+      let isTrue1 = Math.random() > 0.5;
+      let randomAr1 = isTrue1 ? w[1] : (pk2(wa, allWordsAr, 1, [w[1]])[0] || 'غير معروف');
+      qs.push(['tf', w[0], randomAr1, isTrue1 ? 'true' : 'false']);
+
+      // 🔁 التكرار 4: صح أو خطأ (عربي ➔ إنجليزي) - لعكس الاتجاه
+      if (!isArabic) {
+        let isTrue2 = Math.random() > 0.5;
+        let randomEn2 = isTrue2 ? w[0] : (pk2(we, allWordsEn, 1, [w[0]])[0] || 'unknown');
+        qs.push(['tf', w[1], randomEn2, isTrue2 ? 'true' : 'false']);
+      }
+
+      // تمارين إضافية للإنجليزي فقط
+      if (!isArabic) {
+        qs.push(['ls', w[0], w[0], pk(we, 2, [w[0]])]);
         if (w[0].length >= 3 && w[0].length <= 8 && !w[0].includes(' ')) {
           const shuffled = shuf(w[0].toLowerCase().split('')).join('');
           if (shuffled !== w[0].toLowerCase()) qs.push(['us', w[0], w[0].toLowerCase(), null, w[1]]);
@@ -87,6 +106,7 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
       wordQs.push(qs);
     });
 
+    // خلط الأسئلة بالتناوب لضمان عدم ملل الطالب
     const maxQs = Math.max(...wordQs.map(qs => qs.length));
     for (let round = 0; round < maxQs; round++) {
       const roundQs = [];
@@ -94,6 +114,7 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
       allQuestions.push(...shuf(roundQs));
     }
 
+    // تمرين الكلمة الشاذة (إذا كان العدد كافياً)
     if (W.length >= 4) {
       for (let i = 0; i <= W.length - 4; i += 4) {
         const group = W.slice(i, i + 4);
@@ -120,7 +141,9 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
         const isTrue = (qAnswer === 'صح' || qAnswer === 'true');
         qs.push(['tf', qText, isTrue ? '✅ صح' : '❌ خطأ', isTrue ? 'true' : 'false']);
       } else if (qType === 'multiple_choice') {
-        qs.push(['mc', qText, qAnswer, pk2(pa, allSentencesAr, 2, [qAnswer])]);
+        // 🔁 تكرار: سؤالين اختيار من متعدد للجملة نفسها بخيارات مختلفة
+        qs.push(['mc', qText, qAnswer, pk2(pa, allSentencesAr, 3, [qAnswer])]);
+        qs.push(['mc', qText, qAnswer, pk2(pa, allSentencesAr, 3, [qAnswer])]);
       } else {
         qs.push(['fb', qText + ' .....', qAnswer, pk2(pa, allSentencesAr, 3, [qAnswer])]);
       }

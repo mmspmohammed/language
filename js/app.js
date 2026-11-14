@@ -52,37 +52,59 @@ function pk2(a,b,n,ex){var r=pk(a,n,ex);return r.length<n?r.concat(pk(b,n-r.leng
 function say(t){try{speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(t.replace(/[^\x00-\x7F']/g,""));u.lang="en-US";speechSynthesis.speak(u)}catch(e){}}
 
 // ==========================================
-// 3. محرك توليد التمارين (مُطوّر - يشمل التمارين الجديدة)
+// 3. محرك توليد التمارين (مُطوّر - خلط تلقائي + تمارين جديدة)
 // ==========================================
 function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, subject) {
   const L = [], W = lessonData.w || [], P = lessonData.p || [];
   const wa = W.map(w => w[1]), pa = P.map(p => p[1]);
   const isArabic = (subject === "الدراسات الاجتماعية" || subject === "اللغة العربية" || subject === "الاجتماعيات");
   
+  const allQuestions = [];
+  
+  // ═══════════════════════════════════════════
+  // توليد تمارين الكلمات مع خلط بالتناوب
+  // ═══════════════════════════════════════════
   if (W.length > 0) {
-    let q = [];
+    const wordQs = [];
+    
     W.forEach(w => {
-      // اختيار من متعدد (mc)
-      q.push(['mc', w[0], w[1], pk2(wa, allWordsAr, 2, [w[1]])]);
+      const qs = [];
       
-      // صح أو خطأ (tf)
+      // تمرين اختيار متعدد (mc)
+      qs.push(['mc', w[0], w[1], pk2(wa, allWordsAr, 2, [w[1]])]);
+      
+      // تمرين صح/خطأ (tf)
       let isTrue = Math.random() > 0.5;
       let randomAr = isTrue ? w[1] : (pk2(wa, allWordsAr, 1, [w[1]])[0] || 'غير معروف');
-      q.push(['tf', w[0], randomAr, isTrue ? 'true' : 'false']);
+      qs.push(['tf', w[0], randomAr, isTrue ? 'true' : 'false']);
       
-      // استماع (ls) - إنجليزي فقط
-      if (!isArabic) q.push(['ls', w[0], w[0], pk(W.map(z=>z[0]), 2, [w[0]])]);
-      
-      // 🔥 جديد: أعد ترتيب الحروف (us) - إنجليزي فقط
-      if (!isArabic && w[0].length >= 3 && w[0].length <= 8 && !w[0].includes(' ')) {
-        const shuffled = shuf(w[0].toLowerCase().split('')).join('');
-        if (shuffled !== w[0].toLowerCase()) {
-          q.push(['us', w[0], w[0].toLowerCase(), shuffled]);
+      // تمرين استماع (ls) - إنجليزي فقط
+      if (!isArabic) {
+        qs.push(['ls', w[0], w[0], pk(W.map(z => z[0]), 2, [w[0]])]);
+        
+        // تمرين إعادة ترتيب الحروف (us) - إنجليزي فقط
+        if (w[0].length >= 3 && w[0].length <= 8 && !w[0].includes(' ')) {
+          const shuffled = shuf(w[0].toLowerCase().split('')).join('');
+          if (shuffled !== w[0].toLowerCase()) {
+            qs.push(['us', w[0], w[0].toLowerCase(), shuffled]);
+          }
         }
       }
+      
+      wordQs.push(qs);
     });
     
-    // 🔥 جديد: اختر الكلمة الشاذة (oo) - لكل 4 كلمات
+    // 🔥 الخلط بالتناوب (Round-Robin)
+    const maxQs = Math.max(...wordQs.map(qs => qs.length));
+    for (let round = 0; round < maxQs; round++) {
+      const roundQs = [];
+      wordQs.forEach(qs => {
+        if (qs[round]) roundQs.push(qs[round]);
+      });
+      allQuestions.push(...shuf(roundQs));
+    }
+    
+    // تمرين الكلمة الشاذة (oo)
     if (W.length >= 4) {
       for (let i = 0; i <= W.length - 4; i += 4) {
         const group = W.slice(i, i + 4);
@@ -90,52 +112,82 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
           const oddIndex = Math.floor(Math.random() * 4);
           const oddWord = group[oddIndex];
           const others = group.filter((_, idx) => idx !== oddIndex).map(x => x[1]);
-          q.push(['oo', others.join('، ') + '، ' + oddWord[1], oddWord[1], others]);
+          allQuestions.push(['oo', others.join('، ') + '، ' + oddWord[1], oddWord[1], others]);
         }
       }
     }
     
-    L.push({n: 'المصطلحات والمفاهيم', c: W.map(w => [(w[2] || '') + ' ' + w[0], w[1]]), q: q});
+    L.push({n: 'المصطلحات والمفاهيم', c: W.map(w => [(w[2] || '') + ' ' + w[0], w[1]]), q: []});
   }
 
+  // ═══════════════════════════════════════════
+  // توليد تمارين الجمل مع خلط بالتناوب
+  // ═══════════════════════════════════════════
   if (P.length > 0) {
-    let q = [];
+    const sentQs = [];
+    
     P.forEach(p => {
-      q.push(['mc', p[0], p[1], pk2(pa, allSentencesAr, 2, [p[1]])]);
+      const qs = [];
+      
+      // تمرين اختيار متعدد (mc)
+      qs.push(['mc', p[0], p[1], pk2(pa, allSentencesAr, 2, [p[1]])]);
+      
+      // تمرين صح/خطأ (tf)
       let isTrue = Math.random() > 0.5;
       let randomAr = isTrue ? p[1] : (pk2(pa, allSentencesAr, 1, [p[1]])[0] || 'غير معروف');
-      q.push(['tf', p[0], randomAr, isTrue ? 'true' : 'false']);
+      qs.push(['tf', p[0], randomAr, isTrue ? 'true' : 'false']);
       
       if (isArabic) {
-          q.push(['fb', p[0] + ' .....', p[1], pk2(pa, allSentencesAr, 3, [p[1]])]);
+        // أكمل الفراغ للمواد العربية
+        qs.push(['fb', p[0] + ' .....', p[1], pk2(pa, allSentencesAr, 3, [p[1]])]);
       } else {
-          let t = p[0].split(' ');
-          if (t.length > 2 && t.length < 8) {
-            q.push(['bw', p[1], p[0], pk(allWordsEn, 2, t.map(x => x.toLowerCase().replace(/[.,!?]/g, '')))]);
+        // ترتيب الكلمات (bw) - إنجليزي فقط
+        let t = p[0].split(' ');
+        if (t.length > 2 && t.length < 8) {
+          qs.push(['bw', p[1], p[0], pk(allWordsEn, 2, t.map(x => x.toLowerCase().replace(/[.,!?]/g, '')))]);
+        }
+        
+        // أكمل الفراغ (fb) - إنجليزي
+        let validWords = t.map((w, idx) => ({w: w.replace(/[.,!?]/g, ''), idx})).filter(x => 
+          x.w.length > 2 && !['the','and','you','are','this','that','for','with','what','your','how'].includes(x.w.toLowerCase())
+        );
+        if (validWords.length > 0) {
+          let target = validWords[Math.floor(Math.random() * validWords.length)];
+          let blankWords = [...t];
+          blankWords[target.idx] = '___';
+          let blankSentence = blankWords.join(' ');
+          let wrongOptions = pk(allWordsEn, 3, [target.w]);
+          if (wrongOptions.length < 3) {
+            wrongOptions = wrongOptions.concat(pk(['book', 'pen', 'car', 'dog', 'cat', 'tree', 'house', 'school', 'water', 'food'], 3 - wrongOptions.length, [target.w]));
           }
-          let validWords = t.map((w, idx) => ({w: w.replace(/[.,!?]/g, ''), idx})).filter(x => x.w.length > 2 && !['the','and','you','are','this','that','for','with','what','your','how'].includes(x.w.toLowerCase()));
-          if (validWords.length > 0) {
-             let target = validWords[Math.floor(Math.random() * validWords.length)];
-             let blankWords = [...t];
-             blankWords[target.idx] = '___';
-             let blankSentence = blankWords.join(' ');
-             let wrongOptions = pk(allWordsEn, 3, [target.w]);
-             if (wrongOptions.length < 3) {
-                 wrongOptions = wrongOptions.concat(pk(['book', 'pen', 'car', 'dog', 'cat', 'tree', 'house', 'school', 'water', 'food'], 3 - wrongOptions.length, [target.w]));
-             }
-             q.push(['fb', blankSentence, target.w, wrongOptions]);
-          }
+          qs.push(['fb', blankSentence, target.w, wrongOptions]);
+        }
       }
+      
+      sentQs.push(qs);
     });
-    L.push({n: 'الأسئلة والمعلومات', c: P, q: q});
+    
+    // 🔥 الخلط بالتناوب للجمل
+    const maxQs = Math.max(...sentQs.map(qs => qs.length));
+    for (let round = 0; round < maxQs; round++) {
+      const roundQs = [];
+      sentQs.forEach(qs => {
+        if (qs[round]) roundQs.push(qs[round]);
+      });
+      allQuestions.push(...shuf(roundQs));
+    }
+    
+    L.push({n: 'الأسئلة والمعلومات', c: P, q: []});
   }
 
-  const allQs = [].concat(...L.map(l => l.q));
-  return { cards: L.flatMap(l => l.c), questions: allQs };
+  // 🔥 خلط نهائي لكل الأسئلة
+  const finalQuestions = shuf(allQuestions);
+  
+  return { cards: L.flatMap(l => l.c), questions: finalQuestions };
 }
 
 // ==========================================
-// 4. جلب المنهاج
+// 4. جلب المنهاج وبناء 7 عقد لكل وحدة
 // ==========================================
 async function loadCurriculumFromDB(grade, subject) {
   try {
@@ -158,49 +210,88 @@ async function loadCurriculumFromDB(grade, subject) {
 
     U = units.map(unit => {
       const unitLessons = lessons.filter(l => l.unit_id === unit.id);
-      let uiLessons = [];
-
-      const createLessonObj = (title, w, p) => {
-        const gen = generateExercises({ w, p }, allVocabAr, allSentAr, allVocabEn, subject);
-        return { n: title, c: gen.cards, q: gen.questions };
-      };
-
+      
+      // ═══════════════════════════════════════════
+      // جمع كل المحتوى للوحدة
+      // ═══════════════════════════════════════════
+      const allWords = [];
+      const allSents = [];
+      
       unitLessons.forEach(lesson => {
-        const w = vocab.filter(v => v.lesson_id === lesson.id).map(v => [v.word_en, v.word_ar, v.emoji]);
-        const p = sentences.filter(s => s.lesson_id === lesson.id).map(s => [s.sentence_en, s.sentence_ar]);
-
-        if (w.length > 0) {
-            uiLessons.push(createLessonObj('المفاهيم والمصطلحات', w, []));
-            if (p.length > 0) uiLessons.push(createLessonObj('أسئلة وأجوبة', [], p));
-        } 
-        else if (p.length > 0) {
-            let third = Math.ceil(p.length / 3);
-            let p1 = p.slice(0, third);
-            let p2 = p.slice(third, third*2);
-            let p3 = p.slice(third*2);
-            if (p1.length > 0) uiLessons.push(createLessonObj('معلومات (1)', [], p1));
-            if (p2.length > 0) uiLessons.push(createLessonObj('معلومات (2)', [], p2));
-            if (p3.length > 0) uiLessons.push(createLessonObj('معلومات (3)', [], p3));
-        }
+        vocab.filter(v => v.lesson_id === lesson.id).forEach(v => {
+          allWords.push([v.word_en, v.word_ar, v.emoji]);
+        });
+        sentences.filter(s => s.lesson_id === lesson.id).forEach(s => {
+          allSents.push([s.sentence_en, s.sentence_ar]);
+        });
       });
-
-      if (!isArabic) {
-          const allCards = uiLessons.flatMap(l => l.c);
-          const uniqueCards = [];
-          const seen = new Set();
-          allCards.forEach(c => { if (!seen.has(c[0])) { seen.add(c[0]); uniqueCards.push(c); } });
-          const sq = [];
-          const n = Math.min(8, uniqueCards.length);
-          for (let k = 0; k < n; k++) {
-            const c = uniqueCards[Math.floor(k * uniqueCards.length / n)];
-            sq.push(['sp', c[0], c[0], c[1]]);
-          }
-          uiLessons.push({ n: 'تدريب النطق', c: [], q: sq });
+      
+      // ═══════════════════════════════════════════
+      // التقسيم الجديد: 7 عقد لكل وحدة
+      // ═══════════════════════════════════════════
+      const uiLessons = [];
+      
+      // حساب حجم كل جزء
+      const WORDS_PER_NODE = Math.max(3, Math.ceil(allWords.length / 5));
+      const SENTS_PER_NODE = Math.max(2, Math.ceil(allSents.length / 5));
+      
+      // تقسيم الكلمات إلى أجزاء
+      const wordChunks = [];
+      for (let i = 0; i < allWords.length; i += WORDS_PER_NODE) {
+        wordChunks.push(allWords.slice(i, i + WORDS_PER_NODE));
       }
-
+      
+      // تقسيم الجمل إلى أجزاء
+      const sentChunks = [];
+      for (let i = 0; i < allSents.length; i += SENTS_PER_NODE) {
+        sentChunks.push(allSents.slice(i, i + SENTS_PER_NODE));
+      }
+      
+      // ─────────────────────────────────────────
+      // العقد 1-5: المحتوى التعليمي
+      // ─────────────────────────────────────────
+      const maxChunks = Math.max(wordChunks.length, sentChunks.length);
+      const contentNodes = Math.min(5, maxChunks);
+      
+      for (let i = 0; i < contentNodes; i++) {
+        const w = wordChunks[i] || [];
+        const p = sentChunks[i] || [];
+        const gen = generateExercises({w, p}, allVocabAr, allSentAr, allVocabEn, subject);
+        uiLessons.push({n: `الجزء ${i + 1}`, c: gen.cards, q: gen.questions});
+      }
+      
+      // ─────────────────────────────────────────
+      // العقدة 6: تدريب النطق (إنجليزي) أو مراجعة (عربي)
+      // ─────────────────────────────────────────
+      if (!isArabic && allWords.length > 0) {
+        const uniqueWords = [];
+        const seenWords = new Set();
+        allWords.forEach(w => {
+          if (!seenWords.has(w[0])) {
+            seenWords.add(w[0]);
+            uniqueWords.push(w);
+          }
+        });
+        
+        const sq = [];
+        const n = Math.min(8, uniqueWords.length);
+        for (let k = 0; k < n; k++) {
+          const idx = Math.floor(k * uniqueWords.length / n);
+          const word = uniqueWords[idx];
+          sq.push(['sp', word[0], word[0], word[1]]);
+        }
+        uiLessons.push({n: 'تدريب النطق', c: [], q: sq});
+      } else {
+        const reviewPool = uiLessons.flatMap(l => l.q).filter(q => q[0] === 'mc' || q[0] === 'tf');
+        uiLessons.push({n: 'مراجعة سريعة', c: [], q: shuf(reviewPool).slice(0, 8)});
+      }
+      
+      // ─────────────────────────────────────────
+      // العقدة 7: اختبار الوحدة الشامل
+      // ─────────────────────────────────────────
       const pool = uiLessons.flatMap(l => l.q);
-      uiLessons.push({ n: 'اختبار الدرس', c: [], test: 1, pool: pool, q: [] });
-
+      uiLessons.push({n: 'اختبار الوحدة', c: [], test: 1, pool: pool, q: []});
+      
       return { t: unit.title, en: unit.title_en, l: uiLessons };
     });
 
@@ -485,7 +576,7 @@ window.openSubject = async function(subjectName) {
             <div style="text-align:center; padding:50px 20px; color:var(--mut);">
                 <p style="font-size:50px; margin:0;">🚧</p>
                 <h2 style="margin:10px 0;">المنهاج قيد الإعداد</h2>
-                <p>نحن نعمل حالياُ على إضافة منهاج مادة <b>${subjectName}</b> لهذا الصف.</p>
+                <p>نحن نعمل حالياً على إضافة منهاج مادة <b>${subjectName}</b> لهذا الصف.</p>
             </div>
         `;
         return;
@@ -506,6 +597,9 @@ async function save() {
 
 var cur=null,$=function(s){return document.querySelector(s)};
 
+// ==========================================
+// 6. عرض المسار (Path)
+// ==========================================
 function home(){
  if(!currentStudent) return;
  document.getElementById("cs").textContent="🔥 "+S.streak;
@@ -538,7 +632,7 @@ function start(u,l){
 }
 
 // ==========================================
-// 6. عرض التمارين (مُطوّر - يشمل التمارين الجديدة)
+// 7. عرض التمارين (مُطوّر - يشمل التمارين الجديدة)
 // ==========================================
 function q(){
  if(cur.qs[cur.i][0]=='sp') return sp();
@@ -546,7 +640,7 @@ function q(){
  let mc = (ty === 'mc' || ty === 'ls' || ty === 'fb' || ty === 'tf' || ty === 'oo');
  if (ty === 'tf') { cur.opts = ['true', 'false']; } else { cur.opts = mc ? shuf([x[2]].concat(x[3])) : null; }
  
- // 🔥 جديد: خلط حروف الكلمة لتمرين us
+ // خلط حروف الكلمة لتمرين us
  if (ty === 'us') { cur.scrambled = x[3]; }
  
  cur.bank = mc ? null : shuf(x[2].split(" ").concat(x[3]));
@@ -555,11 +649,11 @@ function q(){
  if (ty === 'tf') {
    b = `<h3>هل هذه المعلومة صحيحة؟</h3><div style="text-align:center; margin: 20px 0; background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--line);"><p style="font-size: 24px; font-weight: bold; color: var(--pri); margin-bottom: 10px;" dir="auto">${x[1]}</p><p style="font-size: 20px; color: var(--mut); margin: 10px 0;">⬇️</p><p style="font-size: 22px; font-weight: bold;" dir="auto">${x[2]}</p></div><div style="display:flex; gap:10px; margin-top:20px;"><button class="opt" style="text-align:center; justify-content:center; border-color: var(--good); color: var(--good); font-weight:700;" data-i="0">✅ صح</button><button class="opt" style="text-align:center; justify-content:center; border-color: var(--bad); color: var(--bad); font-weight:700;" data-i="1">❌ خطأ</button></div>`;
  } 
- // 🔥 جديد: تمرين Odd One Out
+ // تمرين الكلمة الشاذة (oo)
  else if (ty === 'oo') {
    b = `<h3>🎯 اختر الكلمة الشاذة (المختلفة عن الباقي):</h3><p style="text-align:center; color:var(--mut); margin-bottom:20px;">واحدة من هذه الكلمات لا تنتمي للمجموعة</p><div style="margin: 20px 0;">` + cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'" style="text-align:center; font-size:20px; padding:18px; margin-bottom:12px;">'+o+'</button>'}).join("") + `</div>`;
  }
- // 🔥 جديد: تمرين Unscramble Letters
+ // تمرين إعادة ترتيب الحروف (us)
  else if (ty === 'us') {
    b = `<h3>🔤 أعد ترتيب الحروف لتكوين الكلمة:</h3><div style="text-align:center; margin: 30px 0;"><p style="font-size: 18px; color: var(--mut); margin-bottom: 15px;">المعنى: <b dir="auto" style="color:var(--pri);">${x[1]}</b></p><div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin: 30px 0;">` + cur.scrambled.split('').map((letter, i) => `<div style="width:50px; height:60px; background:var(--pri); color:var(--onpri); border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:bold; box-shadow:0 4px 0 var(--pri2);">${letter.toUpperCase()}</div>`).join('') + `</div><input type="text" id="us-answer" class="inp" dir="ltr" placeholder="اكتب الكلمة هنا..." style="font-size:20px; text-align:center; letter-spacing:3px; max-width:300px; margin:20px auto 0; display:block;"></div>`;
  }
@@ -573,7 +667,7 @@ function q(){
  $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"><i style="width:'+(cur.i/cur.qs.length*100)+'%"></i></div><span class="chip">'+(cur.t?'📝 اختبار':'❤️ '+cur.h)+'</span></div><div class="lb">'+b+'</div><div class="lf" id="ft"><div><button class="btn" id="ck" disabled>تحقق</button></div></div>';
  $("#cl").onclick=close;$("#ck").onclick=check;
  
- // 🔥 جديد: تفعيل حقل الإدخال لتمرين us
+ // تفعيل حقل الإدخال لتمرين us
  if (ty === 'us') {
    const input = document.getElementById('us-answer');
    if (input) {
@@ -610,7 +704,7 @@ function bw(){
 }
 
 // ==========================================
-// 7. تقييم الإجابات (مُطوّر - يشمل التمارين الجديدة)
+// 8. تقييم الإجابات (مُطوّر - يشمل التمارين الجديدة)
 // ==========================================
 function check(){
  var x=cur.qs[cur.i],ty=x[0],ok;cur.done=true;
@@ -624,11 +718,11 @@ function check(){
  else if (ty === 'bw') { 
    ok = (cur.ans.map(function(i){return cur.bank[i]}).join(" ") === x[2]); 
  }
- // 🔥 جديد: تقييم Odd One Out
+ // تقييم الكلمة الشاذة (oo)
  else if (ty === 'oo') { 
    ok = (cur.opts[cur.sel] === x[2]); 
  }
- // 🔥 جديد: تقييم Unscramble Letters
+ // تقييم إعادة ترتيب الحروف (us)
  else if (ty === 'us') { 
    const input = document.getElementById('us-answer');
    const userAnswer = input ? input.value.trim().toLowerCase() : '';

@@ -61,7 +61,7 @@ function say(t, rate) {
 }
 
 // ==========================================
-// 3. محرك توليد التمارين (مُطوّر)
+// 3. محرك توليد التمارين (خلط + تمارين جديدة)
 // ==========================================
 function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, subject) {
   const L = [], W = lessonData.w || [], P = lessonData.p || [];
@@ -79,7 +79,6 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
       qs.push(['tf', w[0], randomAr, isTrue ? 'true' : 'false']);
       if (!isArabic) {
         qs.push(['ls', w[0], w[0], pk(W.map(z => z[0]), 2, [w[0]])]);
-        // 🔥 تمرين ترتيب الحروف - يُخزن مع الترجمة العربية
         if (w[0].length >= 3 && w[0].length <= 8 && !w[0].includes(' ')) {
           qs.push(['us', w[0], w[0].toLowerCase(), null, w[1]]);
         }
@@ -154,7 +153,7 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
 }
 
 // ==========================================
-// 4. جلب المنهاج وبناء العقد مع دروس داخلية
+// 4. جلب المنهاج وبناء 7 عقد لكل وحدة
 // ==========================================
 async function loadCurriculumFromDB(grade, subject) {
   try {
@@ -221,7 +220,17 @@ async function loadCurriculumFromDB(grade, subject) {
         uiLessons.push({n: 'الجزء ' + (i + 1), lessons: innerLessons});
       }
 
-      if (!isArabic && allWords.length > 0) {
+      // 🔥 تدريب النطق بالجمل
+      if (!isArabic && allSents.length > 0) {
+        const sq = [];
+        const n = Math.min(8, allSents.length);
+        for (let k = 0; k < n; k++) {
+          const idx = Math.floor(k * allSents.length / n);
+          const sent = allSents[idx];
+          sq.push(['sp', sent[0], sent[0], sent[1]]);
+        }
+        uiLessons.push({n: 'تدريب النطق', c: [], q: sq});
+      } else if (!isArabic && allWords.length > 0) {
         const uniqueWords = [];
         const seenWords = new Set();
         allWords.forEach(w => { if (!seenWords.has(w[0])) { seenWords.add(w[0]); uniqueWords.push(w); } });
@@ -252,7 +261,7 @@ async function loadCurriculumFromDB(grade, subject) {
 }
 
 // ==========================================
-// 5. المصادقة وإدارة الطلاب (بدون تغيير)
+// 5. المصادقة وإدارة الطلاب
 // ==========================================
 let isLoginMode = true;
 document.getElementById('auth-toggle').onclick = () => {
@@ -496,7 +505,7 @@ async function save() {
 var cur=null,$=function(s){return document.querySelector(s)};
 
 // ==========================================
-// 6. عرض المسار (مُطوّر - يتتبع الدروس الداخلية)
+// 6. عرض المسار (يتتبع الدروس الداخلية)
 // ==========================================
 function home(){
  if(!currentStudent) return;
@@ -509,7 +518,6 @@ function home(){
   u.l.forEach(function(q,li){
    var id=ui+"-"+li;
    var d;
-   // 🔥 العقدة ذات الدروس الداخلية: مكتملة فقط إذا كل دروسها مكتملة
    if(q.lessons){
      d = q.lessons.every(function(_, ili){
        return S.done.indexOf(id+"-"+ili) > -1;
@@ -531,7 +539,7 @@ document.getElementById("path").onclick=function(e){
 };
 
 // ==========================================
-// 7. بدء العقدة (مُطوّر - يبدأ من أول درس غير مكتمل)
+// 7. بدء العقدة (يبدأ من أول درس غير مكتمل)
 // ==========================================
 function start(u,l){
  var ls=U[u].l[l];
@@ -544,7 +552,6 @@ function start(u,l){
  }
 
  if(ls.lessons){
-   // 🔥 إيجاد أول درس غير مكتمل
    var startLi = 0;
    var baseId = u+"-"+l;
    for(var i=0; i<ls.lessons.length; i++){
@@ -577,7 +584,6 @@ function showLesson(){
  var lessonNum=cur.li+1;
  var totalLessons=cur.lessons.length;
 
- // 🔥 شريط تقدم الدروس داخل العقدة
  var progressDots='';
  for(var i=0;i<totalLessons;i++){
    var isDone=S.done.indexOf(cur.id+"-"+i)>-1;
@@ -590,7 +596,7 @@ function showLesson(){
  }
 
  if(!lesson.c || !lesson.c.length){
-   $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"></div><span class="chip">📖 '+lessonNum+'/'+totalLessons+'</span></div><div style="text-align:center;padding:10px;">'+progressDots+'</div><div class="lb" id="lb"></div><div class="lf" id="ft"><div><button class="btn" id="ck" disabled>تحقق</button></div></div>';
+   $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"></div><span class="chip">📖 '+lessonNum+'/'+totalLessons+'</span></div><div style="text-align:center;padding:10px;">'+progressDots+'</div><div class="lb" id="lb-content"></div><div class="lf" id="ft"><div><button class="btn" id="ck" disabled>تحقق</button></div></div>';
    $("#cl").onclick=close;
    q();
    return;
@@ -602,13 +608,28 @@ function showLesson(){
 }
 
 // ==========================================
-// 8. عرض التمارين (مُطوّر + تمرين الحروف بالنقر)
+// 8. عرض التمارين (أزرار الصوت + الحروف بالنقر)
 // ==========================================
 function q(){
  if(cur.qs[cur.i][0]=='sp') return sp();
  var x=cur.qs[cur.i],ty=x[0];cur.sel=null;cur.ans=[];cur.done=false;
  let mc = (ty === 'mc' || ty === 'ls' || ty === 'fb' || ty === 'tf' || ty === 'oo');
- if (ty === 'tf') { cur.opts = ['true', 'false']; } else { cur.opts = mc ? shuf([x[2]].concat(x[3])) : null; }
+
+ // 🔥 إصلاح: إزالة التكرارات من الخيارات
+ if (ty === 'tf') {
+   cur.opts = ['true', 'false'];
+ } else {
+   var uniqueOpts = [x[2]];
+   if (x[3]) {
+     x[3].forEach(function(opt) {
+       if (uniqueOpts.indexOf(opt) === -1 && opt !== x[2]) {
+         uniqueOpts.push(opt);
+       }
+     });
+   }
+   cur.opts = shuf(uniqueOpts);
+ }
+
  cur.bank = mc ? null : shuf(x[2].split(" ").concat(x[3]));
  var b = '';
 
@@ -632,7 +653,6 @@ function q(){
  else if (ty === 'oo') {
    b = '<h3>🎯 اختر الكلمة الشاذة:</h3><p style="text-align:center; color:var(--mut); margin-bottom:20px;">واحدة من هذه الكلمات لا تنتمي للمجموعة</p><div style="margin: 20px 0;">' + cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'" style="text-align:center; font-size:20px; padding:18px; margin-bottom:12px;">'+o+'</button>'}).join("") + '</div>';
  }
- // 🔥 تمرين ترتيب الحروف بالنقر
  else if (ty === 'us') {
    var word = x[2];
    var meaning = x[4] || x[1];
@@ -695,7 +715,6 @@ function q(){
    if(spSlow) spSlow.onclick=function(){say(x[1],0.5);};
  }
 
- // 🔥 ربط أحداث تمرين ترتيب الحروف
  if(ty === 'us'){
    usRender();
    document.getElementById('us-say').onclick=function(e){e.stopPropagation();say(cur.usWord,1);};
@@ -715,7 +734,7 @@ function q(){
  else if(ty !== 'us') bw();
 }
 
-// 🔥 دالة عرض تمرين ترتيب الحروف
+// 🔥 عرض تمرين ترتيب الحروف بالنقر
 function usRender(){
  var selEl=document.getElementById('us-selected');
  var bankEl=document.getElementById('us-bank');
@@ -763,34 +782,40 @@ function bw(){
 }
 
 // ==========================================
-// 9. تقييم الإجابات (مُطوّر)
+// 9. تقييم الإجابات (مُصلَح)
 // ==========================================
 function check(){
  var x=cur.qs[cur.i],ty=x[0],ok;cur.done=true;
- if (ty === 'tf') { ok = (cur.opts[cur.sel] === x[3]); }
+ var correctAnswer = x[2];
+
+ if (ty === 'tf') {
+   ok = (cur.opts[cur.sel] === x[3]);
+   correctAnswer = x[3] === 'true' ? '✅ صح' : '❌ خطأ';
+ }
  else if (ty === 'fb') { ok = (cur.opts[cur.sel] === x[2]); }
  else if (ty === 'bw') { ok = (cur.ans.map(function(i){return cur.bank[i]}).join(" ") === x[2]); }
  else if (ty === 'oo') { ok = (cur.opts[cur.sel] === x[2]); }
  else if (ty === 'us') {
    var userWord = cur.usSelected.map(function(i){return cur.usLetters[i]}).join('');
    ok = (userWord === cur.usWord);
+   correctAnswer = cur.usWord;
  }
  else { ok = (cur.opts[cur.sel] === x[2]); }
+
  if(ok)cur.ok++;else cur.h--;
  var f=$("#ft");f.className="lf "+(ok?"ok":"no");
- f.innerHTML='<div><p>'+(ok?"أحسنت! إجابة صحيحة 🎉":"الإجابة الصحيحة:")+'</p>'+(ok?'':'<p class="en" dir="auto" style="font-size:18px;">'+x[2]+'</p>')+'<button class="btn" id="nx">متابعة</button></div>';
+ f.innerHTML='<div><p>'+(ok?"أحسنت! إجابة صحيحة 🎉":"الإجابة الصحيحة:")+'</p>'+(ok?'':'<p class="en" dir="auto" style="font-size:18px; color:var(--pri); font-weight:bold;">'+correctAnswer+'</p>')+'<button class="btn" id="nx">متابعة</button></div>';
  $("#nx").onclick=next;
 }
 
 function next(){ if(cur.h<=0&&!cur.t)return end(false); cur.i++; cur.i>=cur.qs.length?(cur.t?endT():end(true)):q() }
 
 // ==========================================
-// 10. إنهاء الدرس/العقدة (مُطوّر - حفظ كل درس)
+// 10. إنهاء الدرس/العقدة (حفظ كل درس)
 // ==========================================
 function end(w){
  if(cur.lessons){
    if(w){
-     // 🔥 حفظ تقدم الدرس الحالي فوراً
      var lessonId = cur.id+"-"+cur.li;
      if(S.done.indexOf(lessonId)<0) S.done.push(lessonId);
      save();
@@ -798,7 +823,6 @@ function end(w){
      cur.totalOk += cur.ok;
      cur.li++;
 
-     // تخطي الدروس المكتملة مسبقاً
      while(cur.li < cur.lessons.length && S.done.indexOf(cur.id+"-"+cur.li) > -1){
        cur.li++;
      }
@@ -826,20 +850,104 @@ function end(w){
  $("#bk2").onclick=close;
 }
 
+// ==========================================
+// 11. تمرين النطق (تقييم فعلي + تلوين الكلمات)
+// ==========================================
 function sp(){
  var x=cur.qs[cur.i],SR=window.SpeechRecognition||window.webkitSpeechRecognition;cur.done=false;
- $('#L').innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"><i style="width:'+(cur.i/cur.qs.length*100)+'%"></i></div></div><div class="lb"><h3>انطق بصوتك</h3><p class="pr"><span dir="ltr">'+x[1]+'</span></p><div style="display:flex; gap:10px; justify-content:center; margin:15px 0;"><button class="sp" id="sp" style="font-size:28px; padding:10px 20px;">🔊</button><button class="sp" id="sp-slow" style="font-size:28px; padding:10px 20px;">🐢</button></div><p>'+x[3]+'</p>'+(SR?'<button class="mic" id="mic">🎤</button>':'')+'<button class="btn" id="sf" style="'+(SR?'display:none':'')+'">كرّرتها ✔</button></div><div class="lf" id="ft"><div><button class="btn alt" id="sk">تخطّي</button></div></div>';
+ var targetText = x[1];
+ var cleanText = targetText.toLowerCase().replace(/[.,!?;:]/g, '');
+ var targetWords = cleanText.split(/\s+/).filter(function(w){return w.length > 0});
+
+ var wordsHtml = targetWords.map(function(w, i){
+   return '<span id="spw-'+i+'" style="display:inline-block; padding:6px 12px; margin:4px; border-radius:8px; background:var(--card); border:2px solid var(--line); font-size:22px; font-weight:bold; transition:all 0.3s;">'+w+'</span>';
+ }).join(' ');
+
+ $('#L').innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"><i style="width:'+(cur.i/cur.qs.length*100)+'%"></i></div></div>'
+ +'<div class="lb"><h3>🎤 انطق بصوتك</h3>'
+ +'<div style="text-align:center; margin:15px 0;">'
+ +'<div style="display:flex; gap:10px; justify-content:center; margin-bottom:15px;">'
+ +'<button class="sp" id="sp" title="استمع" style="font-size:24px; padding:10px 18px;">🔊</button>'
+ +'<button class="sp" id="sp-slow" title="استمع ببطء" style="font-size:24px; padding:10px 18px;">🐢</button>'
+ +'</div>'
+ +'<p style="color:var(--mut); margin-bottom:10px;">الترجمة: <b dir="auto" style="color:var(--pri);">'+x[3]+'</b></p>'
+ +'</div>'
+ +'<div id="sp-words" style="text-align:center; margin:20px 0; line-height:2.2;">'+wordsHtml+'</div>'
+ +(SR?'<button class="mic" id="mic">🎤</button>':'')
+ +'<button class="btn" id="sf" style="'+(SR?'display:none':'')+'">كرّرتها ✔</button>'
+ +'</div>'
+ +'<div class="lf" id="ft"><div><button class="btn alt" id="sk">تخطّي</button></div></div>';
+
  $('#cl').onclick=close;
- say(x[1],1);
- $('#sp').onclick=function(){say(x[1],1)};
- $('#sp-slow').onclick=function(){say(x[1],0.5)};
+ say(targetText, 1);
+ $('#sp').onclick=function(){say(targetText, 1)};
+ $('#sp-slow').onclick=function(){say(targetText, 0.5)};
  $('#sk').onclick=function(){cur.i++;cur.i>=cur.qs.length?(cur.t?endT():end(true)):q()};
- $('#sf').onclick=function(){cur.ok++;fb(1,'أحسنت!')};
- if(SR)$('#mic').onclick=function(){var m=$('#mic');
-  try{var rec=new SR();rec.lang='en-US';rec.maxAlternatives=3;
-   rec.onresult=function(e){fb(1,'نطق ممتاز! 🎉')};
-   rec.onerror=function(e){$('#sf').style.display='block'};
-   rec.onend=function(){m.classList.remove('on')};m.classList.add('on');rec.start()}catch(err){$('#sf').style.display='block'}}
+ $('#sf').onclick=function(){cur.ok++;fb(1,'أحسنت! 🎉')};
+
+ if(SR){
+   $('#mic').onclick=function(){
+     var m=$('#mic');
+     try{
+       var rec=new SR();
+       rec.lang='en-US';
+       rec.maxAlternatives=1;
+
+       rec.onresult=function(e){
+         var spoken = e.results[0][0].transcript.toLowerCase().replace(/[.,!?;:]/g, '').trim();
+         var spokenWords = spoken.split(/\s+/).filter(function(w){return w.length > 0});
+
+         var correctCount = 0;
+         targetWords.forEach(function(word, i){
+           var el = document.getElementById('spw-'+i);
+           if(!el) return;
+           var isCorrect = spokenWords.some(function(sw){ return sw === word; });
+           if(isCorrect){
+             el.style.color = 'var(--good)';
+             el.style.background = 'var(--okbg)';
+             el.style.borderColor = 'var(--good)';
+             correctCount++;
+           } else {
+             el.style.color = 'var(--bad)';
+             el.style.background = 'var(--badbg)';
+             el.style.borderColor = 'var(--bad)';
+           }
+         });
+
+         var total = targetWords.length;
+         var percentage = total > 0 ? correctCount / total : 0;
+
+         if(percentage >= 0.7){
+           cur.ok++;
+           setTimeout(function(){
+             fb(1, 'نطق ممتاز! 🎉 ('+correctCount+'/'+total+' كلمات صحيحة)');
+           }, 800);
+         } else {
+           setTimeout(function(){
+             var f=$('#ft');
+             f.className='lf no';
+             f.innerHTML='<div><p>حاول مرة أخرى! ('+correctCount+'/'+total+' كلمات صحيحة)</p><p style="font-size:13px; color:var(--mut);">🟢 أخضر = صحيح &nbsp; 🔴 أحمر = يحتاج تدريب</p><div style="display:flex; gap:10px; margin-top:10px;"><button class="btn alt" id="retry" style="flex:1;">🔄 إعادة</button><button class="btn" id="skip2" style="flex:1;">متابعة</button></div></div>';
+             $('#retry').onclick=function(){
+               f.className='lf';
+               f.innerHTML='<div><button class="btn alt" id="sk">تخطّي</button></div>';
+               $('#sk').onclick=function(){cur.i++;cur.i>=cur.qs.length?(cur.t?endT():end(true)):q()};
+               targetWords.forEach(function(w, i){
+                 var el = document.getElementById('spw-'+i);
+                 if(el){ el.style.color=''; el.style.background='var(--card)'; el.style.borderColor='var(--line)'; }
+               });
+             };
+             $('#skip2').onclick=function(){cur.i++;cur.i>=cur.qs.length?(cur.t?endT():end(true)):q()};
+           }, 800);
+         }
+       };
+
+       rec.onerror=function(e){ $('#sf').style.display='block'; };
+       rec.onend=function(){ m.classList.remove('on'); };
+       m.classList.add('on');
+       rec.start();
+     }catch(err){ $('#sf').style.display='block'; }
+   };
+ }
 }
 
 function fb(ok,m){cur.done=true;var f=$('#ft');f.className='lf '+(ok?'ok':'no');f.innerHTML='<div><p>'+m+'</p><button class="btn" id="nx">متابعة</button></div>';$('#nx').onclick=next;}

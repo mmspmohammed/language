@@ -60,13 +60,25 @@ function say(t, rate) {
   } catch(e) {}
 }
 
+// 🔥 دالة جديدة: تكرار الأسئلة (كل سؤال يظهر N مرات)
+function repeatQuestions(questions, times) {
+  const repeated = [];
+  for (let i = 0; i < times; i++) {
+    questions.forEach(q => {
+      // إنشاء نسخة جديدة من السؤال
+      const copy = [...q];
+      repeated.push(copy);
+    });
+  }
+  return shuf(repeated);
+}
+
 // ==========================================
-// 3. محرك توليد التمارين (مُطوّر للتكرار المكثف)
+// 3. محرك توليد التمارين (بدون تمرين oo + تكرار ذكي)
 // ==========================================
 function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, subject) {
   const L = [], W = lessonData.w || [], P = lessonData.p || [];
   const wa = W.map(w => w[1]), pa = P.map(p => p[1]);
-  const we = W.map(w => w[0]), pe = P.map(p => p[0]);
   const isArabic = (subject === "الدراسات الاجتماعية" || subject === "اللغة العربية" || subject === "الاجتماعيات");
   const allQuestions = [];
 
@@ -74,30 +86,12 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
     const wordQs = [];
     W.forEach(w => {
       const qs = [];
-      
-      // 🔁 التكرار 1: إنجليزي ➔ عربي (اختيار من متعدد)
-      qs.push(['mc', w[0], w[1], pk2(wa, allWordsAr, 3, [w[1]])]);
-      
-      // 🔁 التكرار 2: عربي ➔ إنجليزي (اختيار من متعدد) - لعكس الاتجاه
+      qs.push(['mc', w[0], w[1], pk2(wa, allWordsAr, 2, [w[1]])]);
+      let isTrue = Math.random() > 0.5;
+      let randomAr = isTrue ? w[1] : (pk2(wa, allWordsAr, 1, [w[1]])[0] || 'غير معروف');
+      qs.push(['tf', w[0], randomAr, isTrue ? 'true' : 'false']);
       if (!isArabic) {
-        qs.push(['mc', w[1], w[0], pk2(we, allWordsEn, 3, [w[0]])]);
-      }
-
-      // 🔁 التكرار 3: صح أو خطأ (إنجليزي ➔ عربي)
-      let isTrue1 = Math.random() > 0.5;
-      let randomAr1 = isTrue1 ? w[1] : (pk2(wa, allWordsAr, 1, [w[1]])[0] || 'غير معروف');
-      qs.push(['tf', w[0], randomAr1, isTrue1 ? 'true' : 'false']);
-
-      // 🔁 التكرار 4: صح أو خطأ (عربي ➔ إنجليزي) - لعكس الاتجاه
-      if (!isArabic) {
-        let isTrue2 = Math.random() > 0.5;
-        let randomEn2 = isTrue2 ? w[0] : (pk2(we, allWordsEn, 1, [w[0]])[0] || 'unknown');
-        qs.push(['tf', w[1], randomEn2, isTrue2 ? 'true' : 'false']);
-      }
-
-      // تمارين إضافية للإنجليزي فقط
-      if (!isArabic) {
-        qs.push(['ls', w[0], w[0], pk(we, 2, [w[0]])]);
+        qs.push(['ls', w[0], w[0], pk(W.map(z => z[0]), 2, [w[0]])]);
         if (w[0].length >= 3 && w[0].length <= 8 && !w[0].includes(' ')) {
           const shuffled = shuf(w[0].toLowerCase().split('')).join('');
           if (shuffled !== w[0].toLowerCase()) qs.push(['us', w[0], w[0].toLowerCase(), null, w[1]]);
@@ -106,7 +100,6 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
       wordQs.push(qs);
     });
 
-    // خلط الأسئلة بالتناوب لضمان عدم ملل الطالب
     const maxQs = Math.max(...wordQs.map(qs => qs.length));
     for (let round = 0; round < maxQs; round++) {
       const roundQs = [];
@@ -114,18 +107,9 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
       allQuestions.push(...shuf(roundQs));
     }
 
-    // تمرين الكلمة الشاذة (إذا كان العدد كافياً)
-    if (W.length >= 4) {
-      for (let i = 0; i <= W.length - 4; i += 4) {
-        const group = W.slice(i, i + 4);
-        if (group.length === 4) {
-          const oddIndex = Math.floor(Math.random() * 4);
-          const oddWord = group[oddIndex];
-          const others = group.filter((_, idx) => idx !== oddIndex).map(x => x[1]);
-          allQuestions.push(['oo', others.join('، ') + '، ' + oddWord[1], oddWord[1], others]);
-        }
-      }
-    }
+    // 🔥 حذف تمرين "اختر الكلمة الشاذة" (oo)
+    // (تم حذف الكود الذي يولده)
+
     L.push({n: 'المصطلحات والمفاهيم', c: W.map(w => [(w[2] || '') + ' ' + w[0], w[1]]), q: []});
   }
 
@@ -141,9 +125,7 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
         const isTrue = (qAnswer === 'صح' || qAnswer === 'true');
         qs.push(['tf', qText, isTrue ? '✅ صح' : '❌ خطأ', isTrue ? 'true' : 'false']);
       } else if (qType === 'multiple_choice') {
-        // 🔁 تكرار: سؤالين اختيار من متعدد للجملة نفسها بخيارات مختلفة
-        qs.push(['mc', qText, qAnswer, pk2(pa, allSentencesAr, 3, [qAnswer])]);
-        qs.push(['mc', qText, qAnswer, pk2(pa, allSentencesAr, 3, [qAnswer])]);
+        qs.push(['mc', qText, qAnswer, pk2(pa, allSentencesAr, 2, [qAnswer])]);
       } else {
         qs.push(['fb', qText + ' .....', qAnswer, pk2(pa, allSentencesAr, 3, [qAnswer])]);
       }
@@ -159,11 +141,14 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
     L.push({n: 'الأسئلة والمعلومات', c: P.map(p => [p[0], p[1]]), q: []});
   }
 
-  return { cards: L.flatMap(l => l.c), questions: shuf(allQuestions) };
+  // 🔥 تكرار الأسئلة: كل سؤال يظهر مرتين للتثبيت
+  const repeatedQuestions = repeatQuestions(allQuestions, 2);
+
+  return { cards: L.flatMap(l => l.c), questions: repeatedQuestions };
 }
 
 // ==========================================
-// 4. جلب المنهاج وبناء 7 عقد لكل وحدة
+// 4. جلب المنهاج وبناء العقد (مع عقدة مراجعة مكثفة)
 // ==========================================
 async function loadCurriculumFromDB(grade, subject) {
   try {
@@ -252,10 +237,19 @@ async function loadCurriculumFromDB(grade, subject) {
         }
         uiLessons.push({n: 'تدريب النطق', c: [], q: sq});
       } else {
+        // 🔥 عقدة "مراجعة سريعة" (بدلاً من مجرد 8 أسئلة)
         const reviewPool = uiLessons.flatMap(l => l.lessons ? l.lessons.flatMap(il => il.q) : (l.q || [])).filter(q => q[0] === 'mc' || q[0] === 'tf');
-        uiLessons.push({n: 'مراجعة سريعة', c: [], q: shuf(reviewPool).slice(0, 8)});
+        // 🔥 تكرار أسئلة المراجعة 3 مرات
+        const repeatedReview = repeatQuestions(reviewPool, 3);
+        uiLessons.push({n: 'مراجعة سريعة', c: [], q: shuf(repeatedReview).slice(0, 20)});
       }
 
+      // 🔥 عقدة "مراجعة مكثفة" جديدة قبل الاختبار النهائي
+      const allPool = uiLessons.flatMap(l => l.lessons ? l.lessons.flatMap(il => il.q) : (l.q || []));
+      const intensiveReview = repeatQuestions(allPool, 3);
+      uiLessons.push({n: 'مراجعة مكثفة', c: [], q: shuf(intensiveReview).slice(0, 25)});
+
+      // 🔥 الاختبار النهائي: 20 سؤال بدلاً من 10
       const pool = uiLessons.flatMap(l => l.lessons ? l.lessons.flatMap(il => il.q) : (l.q || []));
       uiLessons.push({n: 'اختبار الوحدة', c: [], test: 1, pool: pool, q: []});
 
@@ -270,7 +264,7 @@ async function loadCurriculumFromDB(grade, subject) {
 }
 
 // ==========================================
-// 5. المصادقة وإدارة الطلاب
+// 5. المصادقة وإدارة الطلاب (بدون تغيير)
 // ==========================================
 let isLoginMode = true;
 document.getElementById('auth-toggle').onclick = () => {
@@ -551,7 +545,8 @@ document.getElementById("path").onclick=function(e){
 function start(u,l){
  var ls=U[u].l[l];
  if(ls.test){
-   cur={id:u+"-"+l,u:u,l:l,t:true,qs:shuf(ls.pool).slice(0,10),i:0,h:5,ok:0};
+   // 🔥 الاختبار النهائي: 20 سؤال بدلاً من 10
+   cur={id:u+"-"+l,u:u,l:l,t:true,qs:shuf(ls.pool).slice(0,20),i:0,h:5,ok:0};
    $("#L").className="open"; q(); return;
  }
  if(ls.lessons){
@@ -598,7 +593,7 @@ function showLesson(){
 function q(){
  if(cur.qs[cur.i][0]=='sp') return sp();
  var x=cur.qs[cur.i],ty=x[0];cur.sel=null;cur.ans=[];cur.done=false;
- let mc = (ty === 'mc' || ty === 'ls' || ty === 'fb' || ty === 'tf' || ty === 'oo');
+ let mc = (ty === 'mc' || ty === 'ls' || ty === 'fb' || ty === 'tf');
 
  if (ty === 'tf') {
    cur.opts = ['true', 'false'];
@@ -624,9 +619,6 @@ function q(){
    b = '<h3>هل هذه المعلومة صحيحة؟</h3><div style="text-align:center; margin: 20px 0; background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--line);"><p style="font-size: 24px; font-weight: bold; color: var(--pri); margin-bottom: 10px;" dir="auto">'+x[1]+'</p><p style="font-size: 20px; color: var(--mut); margin: 10px 0;">⬇️</p><p style="font-size: 22px; font-weight: bold;" dir="auto">'+x[2]+'</p></div>';
    if(hasAudio) b+='<div style="display:flex; gap:10px; justify-content:center; margin-bottom:15px;"><button class="sp" id="say-normal" title="استمع" style="font-size:22px; padding:8px 16px;">🔊</button><button class="sp" id="say-slow" title="استمع ببطء" style="font-size:22px; padding:8px 16px;">🐢</button></div>';
    b+='<div style="display:flex; gap:10px; margin-top:20px;"><button class="opt" style="text-align:center; justify-content:center; border-color: var(--good); color: var(--good); font-weight:700;" data-i="0">✅ صح</button><button class="opt" style="text-align:center; justify-content:center; border-color: var(--bad); color: var(--bad); font-weight:700;" data-i="1">❌ خطأ</button></div>';
- }
- else if (ty === 'oo') {
-   b = '<h3>🎯 اختر الكلمة الشاذة:</h3><p style="text-align:center; color:var(--mut); margin-bottom:20px;">واحدة من هذه الكلمات لا تنتمي للمجموعة</p><div style="margin: 20px 0;">' + cur.opts.map(function(o,i){return '<button class="opt" dir="auto" data-i="'+i+'" style="text-align:center; font-size:20px; padding:18px; margin-bottom:12px;">'+o+'</button>'}).join("") + '</div>';
  }
  else if (ty === 'us') {
    var word = x[2]; var meaning = x[4] || x[1];
@@ -736,7 +728,6 @@ function check(){
  }
  else if (ty === 'fb') { ok = (cur.opts[cur.sel] === x[2]); }
  else if (ty === 'bw') { ok = (cur.ans.map(function(i){return cur.bank[i]}).join(" ") === x[2]); }
- else if (ty === 'oo') { ok = (cur.opts[cur.sel] === x[2]); }
  else if (ty === 'us') {
    var userWord = cur.usSelected.map(function(i){return cur.usLetters[i]}).join('');
    ok = (userWord === cur.usWord); correctAnswer = cur.usWord;

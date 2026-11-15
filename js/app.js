@@ -10,9 +10,15 @@ let currentUser = null;
 let currentStudent = null;
 let editingStudentId = null;
 let currentStudentsList = [];
-let S = { xp: 0, streak: 0, last: "", done: [] };
+// 🔥 جديد: بنية مختلفة للتقدم - JSONB منظم حسب المادة
+let S = { 
+  xp: 0, 
+  streak: 0, 
+  last: "", 
+  progress: {} // 🔥 { "اللغة الإنجليزية": {last_unit: 0, last_node: 2, last_lesson: 1}, ... }
+};
 let U = [];
-let currentSubject = ""; // 🔥 جديد: تخزين المادة الحالية
+let currentSubject = "";
 
 const SUBJECTS_BY_GRADE = {
   "الأول": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
@@ -61,16 +67,101 @@ function say(t, rate) {
   } catch(e) {}
 }
 
-// 🔥 دالة جديدة: تكرار الأسئلة
 function repeatQuestions(questions, times) {
   const repeated = [];
   for (let i = 0; i < times; i++) {
-    questions.forEach(q => {
-      const copy = [...q];
-      repeated.push(copy);
-    });
+    questions.forEach(q => { repeated.push([...q]); });
   }
   return shuf(repeated);
+}
+
+// ==========================================
+// 🔥 دوال جديدة لإدارة التقدم المنظم
+// ==========================================
+
+// 🔥 التحقق إذا كان درس معين مكتمل في المادة الحالية
+function isLessonCompleted(unitIdx, nodeIdx, lessonIdx) {
+  const subjectProgress = S.progress[currentSubject];
+  if (!subjectProgress) return false;
+  
+  const lu = subjectProgress.last_unit;
+  const ln = subjectProgress.last_node;
+  const ll = subjectProgress.last_lesson;
+  
+  // إذا الوحدة الحالية قبل آخر وحدة مكتملة → مكتمل
+  if (unitIdx < lu) return true;
+  // إذا الوحدة الحالية بعد آخر وحدة مكتملة → غير مكتمل
+  if (unitIdx > lu) return false;
+  
+  // نفس الوحدة: تحقق من العقدة
+  if (nodeIdx < ln) return true;
+  if (nodeIdx > ln) return false;
+  
+  // نفس العقدة: تحقق من الدرس
+  if (lessonIdx <= ll) return true;
+  return false;
+}
+
+// 🔥 التحقق إذا كانت العقدة كاملة (كل دروسها الداخلية مكتملة)
+function isNodeCompleted(unitIdx, nodeIdx) {
+  const subjectProgress = S.progress[currentSubject];
+  if (!subjectProgress) return false;
+  
+  const lu = subjectProgress.last_unit;
+  const ln = subjectProgress.last_node;
+  
+  if (unitIdx < lu) return true;
+  if (unitIdx > lu) return false;
+  if (nodeIdx < ln) return true;
+  if (nodeIdx > ln) return false;
+  
+  // نفس العقدة: يجب أن يكون last_lesson = آخر درس في العقدة
+  // (سنتحقق من هذا في دالة home)
+  return false;
+}
+
+// 🔥 تحديث النقطة الأخيرة عند إكمال درس
+function updateProgress(unitIdx, nodeIdx, lessonIdx) {
+  if (!S.progress[currentSubject]) {
+    S.progress[currentSubject] = { last_unit: 0, last_node: 0, last_lesson: -1 };
+  }
+  
+  const p = S.progress[currentSubject];
+  
+  // تحقق إذا كانت النقطة الجديدة "أبعد" من الحالية
+  const isNew = 
+    unitIdx > p.last_unit ||
+    (unitIdx === p.last_unit && nodeIdx > p.last_node) ||
+    (unitIdx === p.last_unit && nodeIdx === p.last_node && lessonIdx > p.last_lesson);
+  
+  if (isNew) {
+    p.last_unit = unitIdx;
+    p.last_node = nodeIdx;
+    p.last_lesson = lessonIdx;
+  }
+}
+
+// 🔥 الحصول على أول درس غير مكتمل في عقدة معينة
+function getFirstUnfinishedLesson(unitIdx, nodeIdx, totalLessons) {
+  const subjectProgress = S.progress[currentSubject];
+  if (!subjectProgress) return 0;
+  
+  const lu = subjectProgress.last_unit;
+  const ln = subjectProgress.last_node;
+  const ll = subjectProgress.last_lesson;
+  
+  // إذا العقدة قبل آخر عقدة مكتملة → كل الدروس مكتملة
+  if (unitIdx < lu || (unitIdx === lu && nodeIdx < ln)) {
+    return totalLessons; // كل الدروس مكتملة
+  }
+  
+  // إذا العقدة بعد آخر عقدة مكتملة → ابدأ من أول درس
+  if (unitIdx > lu || (unitIdx === lu && nodeIdx > ln)) {
+    return 0;
+  }
+  
+  // نفس العقدة: ابدأ من الدرس الذي بعد آخر مكتمل
+  return ll + 1;
 }
 
 // ==========================================
@@ -143,7 +234,7 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
 }
 
 // ==========================================
-// 4. جلب المنهاج وبناء العقد
+// 4. جلب المنهاج
 // ==========================================
 async function loadCurriculumFromDB(grade, subject) {
   try {
@@ -431,7 +522,13 @@ window.selectStudent = async function(id) {
       const { data: np } = await sb.from('progress').insert({ student_id: id }).select().single();
       progress = np;
     }
-    S = { xp: progress.xp || 0, streak: progress.streak || 0, last: progress.last_active || "", done: progress.completed_lessons || [] };
+    // 🔥 جديد: قراءة التقدم المنظم
+    S = { 
+      xp: progress.xp || 0, 
+      streak: progress.streak || 0, 
+      last: progress.last_active || "", 
+      progress: progress.completed_lessons || {} // 🔥 JSONB منظم
+    };
     const studentFirstName = currentStudent.full_name.split(' ')[0];
     document.getElementById('subjects-student-name').textContent = studentFirstName + ' - المواد';
     document.getElementById('subjects-student-greeting').textContent = studentFirstName;
@@ -456,9 +553,7 @@ window.selectStudent = async function(id) {
 };
 
 window.openSubject = async function(subjectName) {
-    // 🔥 جديد: حفظ المادة الحالية
     currentSubject = subjectName;
-    
     document.getElementById('app-student-name').textContent = currentStudent.full_name.split(' ')[0] + ' • ' + subjectName;
     showScreen('app-screen');
     document.getElementById('path').innerHTML = '<div style="text-align:center;margin-top:50px;color:var(--mut);">⏳ جاري تحميل المنهاج...</div>';
@@ -495,34 +590,62 @@ document.getElementById('back-to-profiles-from-subjects').onclick = () => { show
 async function save() {
   if (!currentStudent) return;
   await sb.from('progress').update({
-    xp: S.xp, streak: S.streak, last_active: S.last ? new Date(S.last).toISOString() : null, completed_lessons: S.done
+    xp: S.xp, 
+    streak: S.streak, 
+    last_active: S.last ? new Date(S.last).toISOString() : null, 
+    completed_lessons: S.progress // 🔥 حفظ JSONB المنظم
   }).eq('student_id', currentStudent.id);
 }
 
 var cur=null,$=function(s){return document.querySelector(s)};
 
 // ==========================================
-// 6. عرض المسار (مع تمييز المادة)
+// 🔥 6. عرض المسار (مع البنية الجديدة)
 // ==========================================
 function home(){
  if(!currentStudent) return;
  document.getElementById("cs").textContent="🔥 "+S.streak;
  document.getElementById("cx").textContent="⭐ "+S.xp;
+ 
  var h="",k=0,off=[0,26,38,26,0,-26,-38,-26],cu=false;
+ 
  U.forEach(function(u,ui){
   h+='<div class="unit"><h2>'+u.t+'</h2><p>'+u.en+'</p></div>';
   if(!u.l.length)h+='<p class="soon">قريباً</p>';
+  
   u.l.forEach(function(q,li){
-   // 🔥 جديد: إضافة اسم المادة إلى المعرف
-   var id=currentSubject+"-"+ui+"-"+li;
-   var d;
-   if(q.lessons){
-     d = q.lessons.every(function(_, ili){ return S.done.indexOf(currentSubject+"-"+id+"-"+ili) > -1; });
+   var nodeDone = false;
+   var nodeLocked = false;
+   
+   if(q.test){
+     // اختبار الوحدة: مكتمل إذا كل العقد قبله مكتملة
+     nodeDone = isNodeCompleted(ui, li - 1) || (li === 0);
+     // العقدة الأخيرة قبل الاختبار يجب أن تكون مكتملة
+     if (li > 0) {
+       const prevNode = u.l[li - 1];
+       if (prevNode.lessons) {
+         const totalLessons = prevNode.lessons.length;
+         nodeDone = isLessonCompleted(ui, li - 1, totalLessons - 1);
+       } else {
+         nodeDone = isNodeCompleted(ui, li - 1);
+       }
+     }
+   } else if(q.lessons){
+     // عقدة ذات دروس داخلية
+     const totalLessons = q.lessons.length;
+     nodeDone = isLessonCompleted(ui, li, totalLessons - 1);
    } else {
-     d = S.done.indexOf(id) > -1;
+     // عقدة عادية (نطق/مراجعة)
+     nodeDone = isNodeCompleted(ui, li);
    }
-   var c=!d&&!cu,st=d?"done":c?"":"lock";if(c)cu=true;
-   h+='<button class="node '+st+'" style="transform:translateX('+off[k%8]+'px)" data-u="'+ui+'" data-l="'+li+'">'+(d?"✓":q.test?"🏆":"★")+'</button>';k++;
+   
+   var c = !nodeDone && !cu;
+   if (c) cu = true;
+   
+   var st = nodeDone ? "done" : c ? "" : "lock";
+   
+   h+='<button class="node '+st+'" style="transform:translateX('+off[k%8]+'px)" data-u="'+ui+'" data-l="'+li+'">'+(nodeDone?"✓":q.test?"🏆":"★")+'</button>';
+   k++;
   });
  });
  document.getElementById("path").innerHTML=h;
@@ -535,24 +658,31 @@ document.getElementById("path").onclick=function(e){
 };
 
 // ==========================================
-// 7. بدء العقدة (مع تمييز المادة)
+// 🔥 7. بدء العقدة (مع البنية الجديدة)
 // ==========================================
 function start(u,l){
  var ls=U[u].l[l];
+ 
  if(ls.test){
-   cur={id:currentSubject+"-"+u+"-"+l,u:u,l:l,t:true,qs:shuf(ls.pool).slice(0,20),i:0,h:5,ok:0};
+   cur={u:u,l:l,t:true,qs:shuf(ls.pool).slice(0,20),i:0,h:5,ok:0};
    $("#L").className="open"; q(); return;
  }
+ 
  if(ls.lessons){
-   var startLi = 0;
-   var baseId = currentSubject+"-"+u+"-"+l;
-   for(var i=0; i<ls.lessons.length; i++){
-     if(S.done.indexOf(baseId+"-"+i) === -1){ startLi = i; break; }
+   // 🔥 جديد: إيجاد أول درس غير مكتمل في العقدة
+   var startLi = getFirstUnfinishedLesson(u, l, ls.lessons.length);
+   
+   // إذا كل الدروس مكتملة، انتقل للعقدة التالية
+   if (startLi >= ls.lessons.length) {
+     toast("هذه العقدة مكتملة بالفعل!", 'info');
+     return;
    }
-   cur={id:baseId,u:u,l:l,t:false,lessons:ls.lessons,li:startLi,h:5,ok:0,totalOk:0};
+   
+   cur={u:u,l:l,t:false,lessons:ls.lessons,li:startLi,h:5,ok:0,totalOk:0};
    $("#L").className="open"; showLesson(); return;
  }
- cur={id:currentSubject+"-"+u+"-"+l,u:u,l:l,t:false,qs:ls.q,i:0,h:5,ok:0};
+ 
+ cur={u:u,l:l,t:false,qs:ls.q,i:0,h:5,ok:0};
  $("#L").className="open";
  if(!ls.c || !ls.c.length){q();return}
  $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"></div></div><div class="lb"><h3>'+ls.n+'</h3><p>اقرأ المعلومات التالية بتركيز:</p>'+ls.c.map(function(c,i){return '<div class="card"><b dir="auto">'+c[0]+'</b><span>'+c[1]+'</span></div>'}).join("")+'</div><div class="lf"><div><button class="btn" id="go">ابدأ التمارين</button></div></div>';
@@ -563,9 +693,10 @@ function showLesson(){
  var lesson=cur.lessons[cur.li];
  cur.qs=lesson.q; cur.i=0; cur.ok=0; cur.h=5;
  var lessonNum=cur.li+1; var totalLessons=cur.lessons.length;
+ 
  var progressDots='';
  for(var i=0;i<totalLessons;i++){
-   var isDone=S.done.indexOf(cur.id+"-"+i)>-1;
+   var isDone = isLessonCompleted(cur.u, cur.l, i);
    var isCurrent=i===cur.li;
    var dotStyle='width:12px;height:12px;border-radius:50%;display:inline-block;margin:0 3px;';
    if(isDone) dotStyle+='background:var(--good);';
@@ -573,6 +704,7 @@ function showLesson(){
    else dotStyle+='background:var(--line);';
    progressDots+='<span style="'+dotStyle+'"></span>';
  }
+ 
  if(!lesson.c || !lesson.c.length){
    $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"></div><span class="chip">📖 '+lessonNum+'/'+totalLessons+'</span></div><div style="text-align:center;padding:10px;">'+progressDots+'</div><div class="lb" id="lb-content"></div><div class="lf" id="ft"><div><button class="btn" id="ck" disabled>تحقق</button></div></div>';
    $("#cl").onclick=close; q(); return;
@@ -737,17 +869,22 @@ function check(){
 function next(){ if(cur.h<=0&&!cur.t)return end(false); cur.i++; cur.i>=cur.qs.length?(cur.t?endT():end(true)):q() }
 
 // ==========================================
-// 10. إنهاء الدرس/العقدة
+// 🔥 10. إنهاء الدرس/العقدة (مع البنية الجديدة)
 // ==========================================
 function end(w){
  if(cur.lessons){
    if(w){
-     var lessonId = cur.id+"-"+cur.li;
-     if(S.done.indexOf(lessonId)<0) S.done.push(lessonId);
+     // 🔥 جديد: تحديث النقطة الأخيرة
+     updateProgress(cur.u, cur.l, cur.li);
      save();
+     
      cur.totalOk += cur.ok; cur.li++;
-     while(cur.li < cur.lessons.length && S.done.indexOf(cur.id+"-"+cur.li) > -1) cur.li++;
+     
+     // تخطي الدروس المكتملة مسبقاً
+     while(cur.li < cur.lessons.length && isLessonCompleted(cur.u, cur.l, cur.li)) cur.li++;
+     
      if(cur.li < cur.lessons.length){ showLesson(); return; }
+     
      var g=10+cur.totalOk*2; S.xp+=g; save();
      $("#L").innerHTML='<div class="lb end"><p class="big">🎉</p><h2>أكملت كل الدروس!</h2><p>أحسنت! أنهيت '+cur.lessons.length+' دروس بنجاح</p></div><div class="lf"><div><button class="btn" id="bk2">متابعة</button></div></div>';
      $("#bk2").onclick=close;
@@ -757,8 +894,15 @@ function end(w){
    }
    return;
  }
+ 
  var g=0;
- if(w){g=10+cur.ok*2;S.xp+=g;if(S.done.indexOf(cur.id)<0)S.done.push(cur.id);save()}
+ if(w){
+   g=10+cur.ok*2;
+   S.xp+=g;
+   // 🔥 للاختبار: تحديث النقطة الأخيرة
+   updateProgress(cur.u, cur.l, 999); // 999 = كل الدروس مكتملة
+   save();
+ }
  $("#L").innerHTML='<div class="lb end"><p class="big">'+(w?"🎉":"💔")+'</p><h2>'+(w?"أكملت!":"انتهت القلوب")+'</h2></div><div class="lf"><div><button class="btn" id="bk2">متابعة</button></div></div>';
  $("#bk2").onclick=close;
 }
@@ -838,7 +982,11 @@ function fb(ok,m){cur.done=true;var f=$('#ft');f.className='lf '+(ok?'ok':'no');
 
 function endT(){
  var n=cur.qs.length,ok=cur.ok,pass=ok/n>=.8,g=30;
- if(pass){S.xp+=g;if(S.done.indexOf(cur.id)<0)S.done.push(cur.id);save()}
+ if(pass){
+   S.xp+=g;
+   updateProgress(cur.u, cur.l, 999);
+   save();
+ }
  $('#L').innerHTML='<div class="lb end"><p class="big">'+(pass?'🏆':'📝')+'</p><h2>'+(pass?'نجحت!':'حاول مجدداً')+'</h2><p>نتيجتك: '+ok+' من '+n+'</p></div><div class="lf"><div><button class="btn" id="bk2">متابعة</button></div></div>';
  $('#bk2').onclick=close;
 }

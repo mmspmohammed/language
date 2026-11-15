@@ -12,6 +12,7 @@ let editingStudentId = null;
 let currentStudentsList = [];
 let S = { xp: 0, streak: 0, last: "", done: [] };
 let U = [];
+let currentSubject = ""; // 🔥 جديد: تخزين المادة الحالية
 
 const SUBJECTS_BY_GRADE = {
   "الأول": ["اللغة الإنجليزية", "الرياضيات", "اللغة العربية"],
@@ -60,12 +61,11 @@ function say(t, rate) {
   } catch(e) {}
 }
 
-// 🔥 دالة جديدة: تكرار الأسئلة (كل سؤال يظهر N مرات)
+// 🔥 دالة جديدة: تكرار الأسئلة
 function repeatQuestions(questions, times) {
   const repeated = [];
   for (let i = 0; i < times; i++) {
     questions.forEach(q => {
-      // إنشاء نسخة جديدة من السؤال
       const copy = [...q];
       repeated.push(copy);
     });
@@ -74,7 +74,7 @@ function repeatQuestions(questions, times) {
 }
 
 // ==========================================
-// 3. محرك توليد التمارين (بدون تمرين oo + تكرار ذكي)
+// 3. محرك توليد التمارين
 // ==========================================
 function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, subject) {
   const L = [], W = lessonData.w || [], P = lessonData.p || [];
@@ -107,9 +107,6 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
       allQuestions.push(...shuf(roundQs));
     }
 
-    // 🔥 حذف تمرين "اختر الكلمة الشاذة" (oo)
-    // (تم حذف الكود الذي يولده)
-
     L.push({n: 'المصطلحات والمفاهيم', c: W.map(w => [(w[2] || '') + ' ' + w[0], w[1]]), q: []});
   }
 
@@ -141,14 +138,12 @@ function generateExercises(lessonData, allWordsAr, allSentencesAr, allWordsEn, s
     L.push({n: 'الأسئلة والمعلومات', c: P.map(p => [p[0], p[1]]), q: []});
   }
 
-  // 🔥 تكرار الأسئلة: كل سؤال يظهر مرتين للتثبيت
   const repeatedQuestions = repeatQuestions(allQuestions, 2);
-
   return { cards: L.flatMap(l => l.c), questions: repeatedQuestions };
 }
 
 // ==========================================
-// 4. جلب المنهاج وبناء العقد (مع عقدة مراجعة مكثفة)
+// 4. جلب المنهاج وبناء العقد
 // ==========================================
 async function loadCurriculumFromDB(grade, subject) {
   try {
@@ -237,19 +232,15 @@ async function loadCurriculumFromDB(grade, subject) {
         }
         uiLessons.push({n: 'تدريب النطق', c: [], q: sq});
       } else {
-        // 🔥 عقدة "مراجعة سريعة" (بدلاً من مجرد 8 أسئلة)
         const reviewPool = uiLessons.flatMap(l => l.lessons ? l.lessons.flatMap(il => il.q) : (l.q || [])).filter(q => q[0] === 'mc' || q[0] === 'tf');
-        // 🔥 تكرار أسئلة المراجعة 3 مرات
         const repeatedReview = repeatQuestions(reviewPool, 3);
         uiLessons.push({n: 'مراجعة سريعة', c: [], q: shuf(repeatedReview).slice(0, 20)});
       }
 
-      // 🔥 عقدة "مراجعة مكثفة" جديدة قبل الاختبار النهائي
       const allPool = uiLessons.flatMap(l => l.lessons ? l.lessons.flatMap(il => il.q) : (l.q || []));
       const intensiveReview = repeatQuestions(allPool, 3);
       uiLessons.push({n: 'مراجعة مكثفة', c: [], q: shuf(intensiveReview).slice(0, 25)});
 
-      // 🔥 الاختبار النهائي: 20 سؤال بدلاً من 10
       const pool = uiLessons.flatMap(l => l.lessons ? l.lessons.flatMap(il => il.q) : (l.q || []));
       uiLessons.push({n: 'اختبار الوحدة', c: [], test: 1, pool: pool, q: []});
 
@@ -264,7 +255,7 @@ async function loadCurriculumFromDB(grade, subject) {
 }
 
 // ==========================================
-// 5. المصادقة وإدارة الطلاب (بدون تغيير)
+// 5. المصادقة وإدارة الطلاب
 // ==========================================
 let isLoginMode = true;
 document.getElementById('auth-toggle').onclick = () => {
@@ -465,6 +456,9 @@ window.selectStudent = async function(id) {
 };
 
 window.openSubject = async function(subjectName) {
+    // 🔥 جديد: حفظ المادة الحالية
+    currentSubject = subjectName;
+    
     document.getElementById('app-student-name').textContent = currentStudent.full_name.split(' ')[0] + ' • ' + subjectName;
     showScreen('app-screen');
     document.getElementById('path').innerHTML = '<div style="text-align:center;margin-top:50px;color:var(--mut);">⏳ جاري تحميل المنهاج...</div>';
@@ -508,7 +502,7 @@ async function save() {
 var cur=null,$=function(s){return document.querySelector(s)};
 
 // ==========================================
-// 6. عرض المسار
+// 6. عرض المسار (مع تمييز المادة)
 // ==========================================
 function home(){
  if(!currentStudent) return;
@@ -519,10 +513,11 @@ function home(){
   h+='<div class="unit"><h2>'+u.t+'</h2><p>'+u.en+'</p></div>';
   if(!u.l.length)h+='<p class="soon">قريباً</p>';
   u.l.forEach(function(q,li){
-   var id=ui+"-"+li;
+   // 🔥 جديد: إضافة اسم المادة إلى المعرف
+   var id=currentSubject+"-"+ui+"-"+li;
    var d;
    if(q.lessons){
-     d = q.lessons.every(function(_, ili){ return S.done.indexOf(id+"-"+ili) > -1; });
+     d = q.lessons.every(function(_, ili){ return S.done.indexOf(currentSubject+"-"+id+"-"+ili) > -1; });
    } else {
      d = S.done.indexOf(id) > -1;
    }
@@ -540,25 +535,24 @@ document.getElementById("path").onclick=function(e){
 };
 
 // ==========================================
-// 7. بدء العقدة
+// 7. بدء العقدة (مع تمييز المادة)
 // ==========================================
 function start(u,l){
  var ls=U[u].l[l];
  if(ls.test){
-   // 🔥 الاختبار النهائي: 20 سؤال بدلاً من 10
-   cur={id:u+"-"+l,u:u,l:l,t:true,qs:shuf(ls.pool).slice(0,20),i:0,h:5,ok:0};
+   cur={id:currentSubject+"-"+u+"-"+l,u:u,l:l,t:true,qs:shuf(ls.pool).slice(0,20),i:0,h:5,ok:0};
    $("#L").className="open"; q(); return;
  }
  if(ls.lessons){
    var startLi = 0;
-   var baseId = u+"-"+l;
+   var baseId = currentSubject+"-"+u+"-"+l;
    for(var i=0; i<ls.lessons.length; i++){
      if(S.done.indexOf(baseId+"-"+i) === -1){ startLi = i; break; }
    }
    cur={id:baseId,u:u,l:l,t:false,lessons:ls.lessons,li:startLi,h:5,ok:0,totalOk:0};
    $("#L").className="open"; showLesson(); return;
  }
- cur={id:u+"-"+l,u:u,l:l,t:false,qs:ls.q,i:0,h:5,ok:0};
+ cur={id:currentSubject+"-"+u+"-"+l,u:u,l:l,t:false,qs:ls.q,i:0,h:5,ok:0};
  $("#L").className="open";
  if(!ls.c || !ls.c.length){q();return}
  $("#L").innerHTML='<div class="lh"><button class="x" id="cl">✕</button><div class="bar"></div></div><div class="lb"><h3>'+ls.n+'</h3><p>اقرأ المعلومات التالية بتركيز:</p>'+ls.c.map(function(c,i){return '<div class="card"><b dir="auto">'+c[0]+'</b><span>'+c[1]+'</span></div>'}).join("")+'</div><div class="lf"><div><button class="btn" id="go">ابدأ التمارين</button></div></div>';
